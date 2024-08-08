@@ -484,15 +484,24 @@ SourceResultType PhysicalNestedLoopJoin::GetData(ExecutionContext &context, Data
 	sink.right_outer.Scan(gstate.scan_state, lstate.scan_state, chunk);
 #ifdef LINEAGE
   if (lineage_manager->capture && active_log) {
-    //buffer_ptr<SelectionData> sel_copy = make_shared_ptr<SelectionData>(chunk.size());
+    if (lineage_manager->compress){
+		sel_t* sel_copy = new sel_t[chunk.size()];
+		std::copy(lstate.scan_state.match_sel.data(),
+			      lstate.scan_state.match_sel.data() + chunk.size(),
+			      sel_copy);
+		active_log->compressed_row_group_log.PushBack(reinterpret_cast<idx_t>(sel_copy), chunk.size(),
+			                                          lstate.scan_state.local_scan.current_row_index, active_lop->children[0]->out_start);
+	} else {
+		//buffer_ptr<SelectionData> sel_copy = make_shared_ptr<SelectionData>(chunk.size());
 		unique_ptr<sel_t[]> sel_copy(new sel_t[chunk.size()]);
 		std::copy(lstate.scan_state.match_sel.data(),
-        lstate.scan_state.match_sel.data() + chunk.size(),
-        sel_copy.get());
-//sel_copy->owned_data.get());
-    active_log->row_group_log.push_back({move(sel_copy), chunk.size(),
-        lstate.scan_state.local_scan.current_row_index, active_lop->children[0]->out_start});
-    // TODO: add to latest
+			      lstate.scan_state.match_sel.data() + chunk.size(),
+			      sel_copy.get());
+		//sel_copy->owned_data.get());
+		active_log->row_group_log.push_back({move(sel_copy), chunk.size(),
+			                                 lstate.scan_state.local_scan.current_row_index, active_lop->children[0]->out_start});
+		// TODO: add to latest
+	}
   }
 #endif
 

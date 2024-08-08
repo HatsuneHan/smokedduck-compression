@@ -508,7 +508,11 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 			}
 #ifdef LINEAGE
 			if (lineage_manager->capture && active_log) {
-				active_log->row_group_log.push_back({nullptr, count, this->start, current_row});
+				if (lineage_manager->compress){
+					active_log->compressed_row_group_log.PushBack(0, count, this->start, current_row);
+				} else{
+					active_log->row_group_log.push_back({nullptr, count, this->start, current_row});
+				}
 			}
 #endif
 		} else {
@@ -557,10 +561,16 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 			}
 #ifdef LINEAGE
 			if (lineage_manager->capture && active_log) {
-			  unique_ptr<sel_t[]> sel_copy(new sel_t[approved_tuple_count]);
-			  std::copy(sel.data(), sel.data() + approved_tuple_count, sel_copy.get());
-				active_log->row_group_log.push_back({move(sel_copy), approved_tuple_count, this->start, current_row});
-				//active_log->row_group_log.push_back({sel.sel_data(), approved_tuple_count, this->start, current_row});
+				if(lineage_manager->compress){
+					sel_t* sel_copy = new sel_t[approved_tuple_count];
+					std::copy(sel.data(), sel.data() + approved_tuple_count, sel_copy);
+					active_log->compressed_row_group_log.PushBack(reinterpret_cast<idx_t>(sel_copy), approved_tuple_count, this->start, current_row);
+				}else{
+					unique_ptr<sel_t[]> sel_copy(new sel_t[approved_tuple_count]);
+					std::copy(sel.data(), sel.data() + approved_tuple_count, sel_copy.get());
+					active_log->row_group_log.push_back({move(sel_copy), approved_tuple_count, this->start, current_row});
+				}
+
 			}
 #endif
 			//! Now we use the selection vector to fetch data for the other columns.

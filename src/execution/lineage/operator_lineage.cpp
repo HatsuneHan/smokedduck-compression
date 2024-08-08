@@ -36,17 +36,36 @@ void OperatorLineage::PostProcess() {
 	case PhysicalOperatorType::TABLE_SCAN: {
     for (int i=0; i < thread_vec.size(); i++) {
       void* tkey = thread_vec[i];
-      if (log.count(tkey) == 0 || log[tkey]->row_group_log.empty()) continue;
-      for (int k=0; k < log[tkey]->row_group_log.size(); ++k) {
-        idx_t res_count = log[tkey]->row_group_log[k].count;
-        idx_t offset = log[tkey]->row_group_log[k].start + log[tkey]->row_group_log[k].vector_index;
-        if (log[tkey]->row_group_log[k].sel) {
-          auto payload = log[tkey]->row_group_log[k].sel.get();
-          for (idx_t j=0; j < res_count; ++j) {
-            payload[j] += offset;
-          }
-        }
-      }
+      if (lineage_manager->compress){
+		  if (log.count(tkey) == 0 || log[tkey]->compressed_row_group_log.size == 0) {
+			  continue;
+		  }
+		  for (int k=0; k < log[tkey]->compressed_row_group_log.size; ++k) {
+			  idx_t res_count = log[tkey]->compressed_row_group_log.count[k];
+			  idx_t offset = log[tkey]->compressed_row_group_log.start[k] + log[tkey]->compressed_row_group_log.vector_index[k];
+			  idx_t payload_num = log[tkey]->compressed_row_group_log.sel_addr[k];
+			  if (payload_num) {
+				  auto payload = reinterpret_cast<sel_t*>(payload_num);
+				  for (idx_t j=0; j < res_count; ++j) {
+					  payload[j] += offset;
+				  }
+			  }
+		  }
+	  }else{
+		  if (log.count(tkey) == 0 || log[tkey]->row_group_log.empty()){
+			  continue;
+		  }
+		  for (int k=0; k < log[tkey]->row_group_log.size(); ++k) {
+			  idx_t res_count = log[tkey]->row_group_log[k].count;
+			  idx_t offset = log[tkey]->row_group_log[k].start + log[tkey]->row_group_log[k].vector_index;
+			  if (log[tkey]->row_group_log[k].sel) {
+				  auto payload = log[tkey]->row_group_log[k].sel.get();
+				  for (idx_t j=0; j < res_count; ++j) {
+					  payload[j] += offset;
+				  }
+			  }
+		  }
+	  }
     }
     break;
                                          }
@@ -368,14 +387,33 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
     break;
   }
 	case PhysicalOperatorType::TABLE_SCAN: {
-    if (data_idx >= log->row_group_log.size()) return 0;
-    idx_t count = log->row_group_log[data_idx].count;
-    idx_t offset = log->row_group_log[data_idx].start + log->row_group_log[data_idx].vector_index;
-    data_ptr_t ptr = nullptr;
-    if (log->row_group_log[data_idx].sel) {
-     // ptr = (data_ptr_t)log->row_group_log[data_idx].sel->owned_data.get();
-      ptr = (data_ptr_t)log->row_group_log[data_idx].sel.get(); //owned_data.get();
-    }
+	idx_t count;
+	idx_t offset;
+	data_ptr_t ptr;
+    if (lineage_manager->compress){
+		if (data_idx >= log->compressed_row_group_log.size){
+			return 0;
+		}
+		count = log->compressed_row_group_log.count[data_idx];
+		offset = log->compressed_row_group_log.start[data_idx] + log->compressed_row_group_log.vector_index[data_idx];
+		ptr = nullptr;
+		idx_t ptr_num = log->compressed_row_group_log.sel_addr[data_idx];
+		if (ptr_num) {
+			ptr = reinterpret_cast<data_ptr_t>(ptr_num);
+		}
+	} else {
+		if (data_idx >= log->row_group_log.size()){
+			return 0;
+		}
+		count = log->row_group_log[data_idx].count;
+		offset = log->row_group_log[data_idx].start + log->row_group_log[data_idx].vector_index;
+		ptr = nullptr;
+		if (log->row_group_log[data_idx].sel) {
+			// ptr = (data_ptr_t)log->row_group_log[data_idx].sel->owned_data.get();
+			ptr = (data_ptr_t)log->row_group_log[data_idx].sel.get(); //owned_data.get();
+		}
+	}
+
     chunk.SetCardinality(count);
     if (ptr != nullptr) {
       Vector in_index(LogicalType::INTEGER, ptr);

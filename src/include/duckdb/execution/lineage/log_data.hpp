@@ -13,6 +13,7 @@
 #include "duckdb/common/types/selection_vector.hpp"
 #include "duckdb/common/common.hpp"
 #include "duckdb/common/unordered_map.hpp"
+#include "duckdb/execution/lineage/lineage_compression.hpp"
 
 namespace duckdb {
 
@@ -56,6 +57,14 @@ struct perfect_join_artifact {
 struct scan_artifact {
 	//buffer_ptr<SelectionData> sel;
 	unique_ptr<sel_t[]> sel;
+	idx_t count;
+	idx_t start;
+	idx_t vector_index;
+};
+
+struct scan_artifact_test {
+	//buffer_ptr<SelectionData> sel;
+	sel_t* sel;
 	idx_t count;
 	idx_t start;
 	idx_t vector_index;
@@ -143,6 +152,8 @@ public:
   vector<vector<idx_t>> reorder_log;
   vector<cross_artifact> cross_log;
   vector<nlj_artifact> nlj_log;
+
+  CompressedScanArtifactList compressed_row_group_log;
 
   vector<std::pair<int, int>> execute_internal;
   vector<std::pair<int, int>> cached;

@@ -4,6 +4,8 @@ import pandas as pd
 # Creating connection
 with smokedduck.connect(':default:') as con:
     con.execute('CALL dbgen(sf=1);')
+    df = con.execute('PRAGMA show_tables;')
+    print(df)
 
     skip_list = []
     # 2, 4
@@ -14,13 +16,13 @@ with smokedduck.connect(':default:') as con:
             continue
         con.execute("pragma enable_optimizer;")
         qid = str(i).zfill(2)
-        query_file = f"benchmark/smokedduck-scripts/queries/q{qid}.sql"
-        logical_file = f"benchmark/smokedduck-scripts/queries/perm_test/q{qid}.sql"
+        query_file = f"../queries/q{qid}.sql"
+        logical_file = f"../queries/perm_test/q{qid}.sql"
         try:
             with open(query_file, "r") as f:
                 sql = " ".join(f.read().split())
             # Printing lineage that was captured from base query
-            con.execute(sql, capture_lineage='lineage')
+            con.execute(sql, capture_lineage='compressedlineage')
             lineage = con.lineage().df()
             #print(lineage)
             with open(logical_file, "r") as f:
@@ -47,7 +49,7 @@ with smokedduck.connect(':default:') as con:
                 print(both)
             assert (len(both) == len(lineage) and len(right_only) == 0) or lineage.equals(logical_lineage), f"DataFrames do not have equal content, {qid}"
             print(f"############# {qid} PASSED ###########")
-        except:
-             print(f"############# {qid} FAILED ###########")
+        except Exception as e:
+            print(e)
+            print(f"############# {qid} FAILED ###########")
            
-

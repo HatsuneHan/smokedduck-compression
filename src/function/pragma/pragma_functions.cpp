@@ -155,9 +155,9 @@ static void PragmaPersistLineage(ClientContext &context, const FunctionParameter
 	std::cout << "\nEnable Persist Lineage" << std::endl;
 }
 
-static void PragmaCondenseLineage(ClientContext &context, const FunctionParameters &parameters) {
-  if (lineage_manager) lineage_manager->condense = true;
-	std::cout << "\nEnable Condense Lineage" << std::endl;
+static void PragmaCompressLineage(ClientContext &context, const FunctionParameters &parameters) {
+  if (lineage_manager) lineage_manager->compress = true;
+	std::cout << "\nEnable Compress Lineage" << std::endl;
 }
 
 #endif
@@ -205,7 +205,7 @@ void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
 	set.AddFunction(PragmaFunction::PragmaStatement("disable_lineage", PragmaDisableLineage));
 	set.AddFunction(PragmaFunction::PragmaStatement("clear_lineage", PragmaClearLineage));
 	set.AddFunction(PragmaFunction::PragmaStatement("persist_lineage", PragmaPersistLineage));
-	set.AddFunction(PragmaFunction::PragmaStatement("condense_lineage", PragmaCondenseLineage));
+	set.AddFunction(PragmaFunction::PragmaStatement("compress_lineage", PragmaCompressLineage));
 #endif
 }
 

@@ -16,6 +16,7 @@ parser.add_argument('--show_tables', action='store_true',  help="List tables")
 parser.add_argument('--show_output', action='store_true',  help="Print query output")
 parser.add_argument('--stats', action='store_true',  help="Get lineage size, nchunks and postprocess time")
 parser.add_argument('--query_lineage', action='store_true',  help="query lineage")
+parser.add_argument('--compress_lineage', action='store_true',  help="compress lineage")
 parser.add_argument('--perm', action='store_true',  help="use perm queries")
 parser.add_argument('--gprom', action='store_true',  help="use perm queries")
 parser.add_argument('--opt', action='store_true',  help="use optimized")
@@ -97,8 +98,10 @@ for th_id in threads_list:
             if args.lineage:
                 for t in tables['name']:
                     if "LINEAGE" in t:
+                        # print("----------------------------")
                         print(t)
                         print(con.execute(f"select * from {t}").df())
+                        # print("----------------------------")
         stats = ""
 
         if args.lineage and args.stats:
@@ -111,7 +114,7 @@ for th_id in threads_list:
         results.append([i, avg, sf, args.repeat, lineage_type, th_id, output_size, stats, args.notes,plan_timings])
 print("average", size_avg/22.0)
 if args.save_csv:
-    filename="tpch_benchmark_capture_{}.csv".format(args.notes)
+    filename="tpch_benchmark_capture_{}_compress.csv".format(args.notes)
     print(filename)
     header = ["query", "runtime", "sf", "repeat", "lineage_type", "n_threads", "output", "stats", "notes", "plan_timings"]
     control = 'w'

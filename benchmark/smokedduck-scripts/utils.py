@@ -101,6 +101,8 @@ def execute(Q, con, args):
         con.execute("PRAGMA profiling_output='{}_plan.json';".format(args.qid))
     if args.lineage and args.show_tables:
         con.execute("PRAGMA persist_lineage")
+    if args.lineage and args.compress_lineage:
+        con.execute("PRAGMA compress_lineage")
     start = timer()
     df = con.execute(Q).fetchdf()
     end = timer()
