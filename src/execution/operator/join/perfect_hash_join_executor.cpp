@@ -86,7 +86,23 @@ bool PerfectHashJoinExecutor::FullScanHashTable(LogicalType &key_type) {
 
 #ifdef LINEAGE
   if (lineage_manager->capture && active_log && key_count) {
-		active_log->perfect_full_scan_ht_log.push_back({sel_build.sel_data(), sel_tuples.sel_data(), move(tuples_addresses.GetBuffer()), key_count, ht.Count()});
+		if (lineage_manager->compress) {
+			sel_t* sel_build_copy = new sel_t[key_count];
+			std::copy(sel_build.sel_data()->owned_data.get(), sel_build.sel_data()->owned_data.get() + key_count, sel_build_copy);
+
+			sel_t* sel_tuples_copy = new sel_t[key_count];
+			std::copy(sel_tuples.sel_data()->owned_data.get(), sel_tuples.sel_data()->owned_data.get() + key_count, sel_tuples_copy);
+
+			data_ptr_t tuples_addresses_copy = new data_t[tuples_addresses.GetBuffer()->GetDataSize()];
+			std::copy(tuples_addresses.GetBuffer()->GetData(), tuples_addresses.GetBuffer()->GetData() + tuples_addresses.GetBuffer()->GetDataSize(), tuples_addresses_copy);
+
+			active_log->compressed_perfect_full_scan_ht_log.PushBack(reinterpret_cast<idx_t>(sel_build_copy),
+			                                                         reinterpret_cast<idx_t>(sel_tuples_copy),
+			                                                         reinterpret_cast<idx_t>(tuples_addresses_copy),
+			                                                         key_count, ht.Count());
+		} else {
+			active_log->perfect_full_scan_ht_log.push_back({sel_build.sel_data(), sel_tuples.sel_data(), move(tuples_addresses.GetBuffer()), key_count, ht.Count()});
+		}
 	}
 #endif
 	return true;
@@ -206,19 +222,39 @@ OperatorResultType PerfectHashJoinExecutor::ProbePerfectHashTable(ExecutionConte
 	}
 #ifdef LINEAGE
   if (lineage_manager->capture && active_log && probe_sel_count) {
-    unique_ptr<sel_t[]> right = nullptr;
-    right = unique_ptr<sel_t[]>(new sel_t[probe_sel_count]);
-    std::copy(state.build_sel_vec.data(), state.build_sel_vec.data() + probe_sel_count, right.get());
+	  if (lineage_manager->compress){
+		  sel_t* right = new sel_t[probe_sel_count];
+		  std::copy(state.build_sel_vec.data(), state.build_sel_vec.data() + probe_sel_count, right);
 
-    unique_ptr<sel_t[]> left = nullptr;
-    if (probe_sel_count < STANDARD_VECTOR_SIZE) {
-      left = unique_ptr<sel_t[]>(new sel_t[probe_sel_count]);
-      std::copy(state.probe_sel_vec.data(), state.probe_sel_vec.data() + probe_sel_count, left.get());
-    }
-   // std::cout << active_lop->operator_id << " perfect " << probe_sel_count << " " << active_lop->out_start << std::endl;
-    active_log->perfect_probe_ht_log.push_back({move(left), move(right), probe_sel_count, active_lop->children[0]->out_start});
-    active_log->SetLatestLSN({active_log->perfect_probe_ht_log.size(), 2});
-	}
+		  sel_t* left = nullptr;
+		  if (probe_sel_count < STANDARD_VECTOR_SIZE) {
+			  left = new sel_t[probe_sel_count];
+			  std::copy(state.probe_sel_vec.data(), state.probe_sel_vec.data() + probe_sel_count, left);
+		  }
+
+		  active_log->compressed_perfect_probe_ht_log.PushBack(reinterpret_cast<idx_t>(left),
+			                                                   reinterpret_cast<idx_t>(right),
+			                                                   probe_sel_count,
+			                                                   active_lop->children[0]->out_start);
+
+		  active_log->SetLatestLSN({active_log->compressed_perfect_probe_ht_log.size, 2});
+
+	  } else {
+		  unique_ptr<sel_t[]> right = nullptr;
+		  right = unique_ptr<sel_t[]>(new sel_t[probe_sel_count]);
+		  std::copy(state.build_sel_vec.data(), state.build_sel_vec.data() + probe_sel_count, right.get());
+
+		  unique_ptr<sel_t[]> left = nullptr;
+		  if (probe_sel_count < STANDARD_VECTOR_SIZE) {
+			  left = unique_ptr<sel_t[]>(new sel_t[probe_sel_count]);
+			  std::copy(state.probe_sel_vec.data(), state.probe_sel_vec.data() + probe_sel_count, left.get());
+		  }
+
+		  active_log->perfect_probe_ht_log.push_back({move(left), move(right), probe_sel_count, active_lop->children[0]->out_start});
+		  active_log->SetLatestLSN({active_log->perfect_probe_ht_log.size(), 2});
+	  }
+
+  }
 #endif
 	return OperatorResultType::NEED_MORE_INPUT;
 }

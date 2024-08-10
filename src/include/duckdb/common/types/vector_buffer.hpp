@@ -70,9 +70,10 @@ class VectorBuffer {
 public:
 	explicit VectorBuffer(VectorBufferType type) : buffer_type(type) {
 	}
-	explicit VectorBuffer(idx_t data_size) : buffer_type(VectorBufferType::STANDARD_BUFFER) {
-		if (data_size > 0) {
-			data = make_unsafe_uniq_array<data_t>(data_size);
+	explicit VectorBuffer(idx_t data_size_p) : buffer_type(VectorBufferType::STANDARD_BUFFER) {
+		if (data_size_p > 0) {
+			data = make_unsafe_uniq_array<data_t>(data_size_p);
+			data_size = data_size_p;
 		}
 	}
 	explicit VectorBuffer(unsafe_unique_array<data_t> data_p)
@@ -86,6 +87,10 @@ public:
 public:
 	data_ptr_t GetData() {
 		return data.get();
+	}
+
+	idx_t GetDataSize() {
+		return data_size;
 	}
 
 	void SetData(unsafe_unique_array<data_t> new_data) {
@@ -122,6 +127,7 @@ protected:
 	VectorBufferType buffer_type;
 	unique_ptr<VectorAuxiliaryData> aux_data;
 	unsafe_unique_array<data_t> data;
+	idx_t data_size;
 
 public:
 	template <class TARGET>

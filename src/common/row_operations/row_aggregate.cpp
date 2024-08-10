@@ -85,13 +85,28 @@ void RowOperations::CombineStates(RowOperationsState &state, TupleDataLayout &la
 #ifdef LINEAGE
 	if (lineage_manager->capture && active_log) {
 		auto src_ptrs = FlatVector::GetData<data_ptr_t>(sources);
-		unique_ptr<data_ptr_t[]> src_copy(new data_ptr_t[count]);
-		std::copy(src_ptrs, src_ptrs + count , src_copy.get());
-
 		auto target_ptrs = FlatVector::GetData<data_ptr_t>(targets);
-		unique_ptr<data_ptr_t[]> target_copy(new data_ptr_t[count]);
-		std::copy(target_ptrs, target_ptrs + count , target_copy.get());
-		active_log->combine_log.push_back({move(src_copy), move(target_copy), count});
+
+		if (lineage_manager->compress){
+			data_ptr_t* src_copy = new data_ptr_t[count];
+			std::copy(src_ptrs, src_ptrs + count , src_copy);
+
+			data_ptr_t* target_copy = new data_ptr_t[count];
+			std::copy(target_ptrs, target_ptrs + count , target_copy);
+
+			active_log->compressed_combine_log.PushBack(reinterpret_cast<idx_t>(src_copy),
+			                                            reinterpret_cast<idx_t>(target_copy),
+			                                            count);
+
+		} else {
+			unique_ptr<data_ptr_t[]> src_copy(new data_ptr_t[count]);
+			std::copy(src_ptrs, src_ptrs + count , src_copy.get());
+
+			unique_ptr<data_ptr_t[]> target_copy(new data_ptr_t[count]);
+			std::copy(target_ptrs, target_ptrs + count , target_copy.get());
+
+			active_log->combine_log.push_back({move(src_copy), move(target_copy), count});
+		}
 	}
 #endif
 
@@ -130,9 +145,15 @@ void RowOperations::FinalizeStates(RowOperationsState &state, TupleDataLayout &l
 #ifdef LINEAGE
 	if (lineage_manager->capture && active_log) {
 		auto ptrs = FlatVector::GetData<data_ptr_t>(addresses);
-		unique_ptr<data_ptr_t[]> addresses_copy(new data_ptr_t[result.size()]);
-		std::copy(ptrs, ptrs + result.size() , addresses_copy.get());
-		active_log->finalize_states_log.push_back({move(addresses_copy), result.size()});
+		if (lineage_manager->compress){
+			data_ptr_t* addresses_copy_lineage = new data_ptr_t[result.size()];
+			std::copy(ptrs, ptrs + result.size() , addresses_copy_lineage);
+			active_log->compressed_finalize_states_log.PushBack(reinterpret_cast<idx_t>(addresses_copy_lineage), result.size());
+		} else {
+			unique_ptr<data_ptr_t[]> addresses_copy_lineage(new data_ptr_t[result.size()]);
+			std::copy(ptrs, ptrs + result.size() , addresses_copy_lineage.get());
+			active_log->finalize_states_log.push_back({move(addresses_copy_lineage), result.size()});
+		}
 	}
 #endif
 

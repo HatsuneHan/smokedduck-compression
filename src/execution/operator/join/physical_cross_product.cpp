@@ -135,10 +135,19 @@ OperatorResultType PhysicalCrossProduct::ExecuteInternal(ExecutionContext &conte
 	auto &state = state_p.Cast<CrossProductOperatorState>();
 #ifdef LINEAGE
 	auto result = state.executor.Execute(input, chunk);
-  if (lineage_manager->capture && active_log) {
-			active_log->cross_log.push_back({state.executor.ScanLHS(), state.executor.PositionInChunk(),
-          state.executor.ScanPosition(), chunk.size(), active_lop->children[0]->out_start});
-      active_log->SetLatestLSN({active_log->filter_log.size(), 0});
+  if (lineage_manager->capture && active_log && chunk.size() > 0) {
+
+      if (lineage_manager->compress){
+		  active_log->compressed_cross_log.PushBack(state.executor.ScanLHS(), state.executor.PositionInChunk(),
+			                               state.executor.ScanPosition(), chunk.size(), active_lop->children[0]->out_start);
+		  active_log->SetLatestLSN({active_log->compressed_cross_log.size, 0});
+
+	  } else {
+		  active_log->cross_log.push_back({state.executor.ScanLHS(), state.executor.PositionInChunk(),
+			                               state.executor.ScanPosition(), chunk.size(), active_lop->children[0]->out_start});
+		  std::cout << "CrossProduct: " << active_log->cross_log.size() << std::endl;
+		  active_log->SetLatestLSN({active_log->cross_log.size(), 0});
+	  }
   }
   return result;
 #else

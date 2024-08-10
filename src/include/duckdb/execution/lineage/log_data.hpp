@@ -62,14 +62,6 @@ struct scan_artifact {
 	idx_t vector_index;
 };
 
-struct scan_artifact_test {
-	//buffer_ptr<SelectionData> sel;
-	sel_t* sel;
-	idx_t count;
-	idx_t start;
-	idx_t vector_index;
-};
-
 struct address_artifact {
 	unique_ptr<data_ptr_t[]> addresses;
 	idx_t count;
@@ -98,7 +90,7 @@ struct join_gather_artifact {
 struct perfect_full_scan_ht_artifact {
 	buffer_ptr<SelectionData> sel_build;
 	buffer_ptr<SelectionData> sel_tuples;
-  buffer_ptr<VectorBuffer> row_locations;
+  	buffer_ptr<VectorBuffer> row_locations;
 	idx_t key_count;
 	idx_t ht_count;
 };
@@ -139,26 +131,51 @@ public:
 public:
   bool capture;
 	std::vector<filter_artifact> filter_log;
+	CompressedFilterArtifactList compressed_filter_log;
+
 	std::vector<limit_artifact> limit_offset;
+	CompressedLimitArtifactList compressed_limit_offset;
+
 	vector<perfect_full_scan_ht_artifact> perfect_full_scan_ht_log;
-  vector<perfect_join_artifact> perfect_probe_ht_log;
+	CompressedPerfectFullScanHTArtifactList compressed_perfect_full_scan_ht_log;
+
+  	vector<perfect_join_artifact> perfect_probe_ht_log;
+	CompressedPerfectJoinArtifactList compressed_perfect_probe_ht_log;
+
 	vector<scan_artifact> row_group_log;
+	CompressedScanArtifactList compressed_row_group_log;
+
 	vector<address_artifact> scatter_log;
+	CompressedAddressArtifactList compressed_scatter_log;
+
 	vector<address_sel_artifact> scatter_sel_log;
+	CompressedAddressSelArtifactList compressed_scatter_sel_log;
+
 	vector<address_artifact> gather_log;
+	CompressedAddressArtifactList compressed_gather_log;
+
 	vector<combine_artifact> combine_log;
+	CompressedCombineArtifactList compressed_combine_log;
+
 	vector<address_artifact> finalize_states_log;
+	CompressedAddressArtifactList compressed_finalize_states_log;
+
 	vector<join_gather_artifact> join_gather_log;
-  vector<vector<idx_t>> reorder_log;
-  vector<cross_artifact> cross_log;
-  vector<nlj_artifact> nlj_log;
+	CompressedJoinGatherArtifactList compressed_join_gather_log;
 
-  CompressedScanArtifactList compressed_row_group_log;
+  	vector<vector<idx_t>> reorder_log;
+	vector<CompressedReorderLogArtifactList> compressed_reorder_log;
+//
+  	vector<cross_artifact> cross_log;
+	CompressedCrossArtifactList compressed_cross_log;
 
-  vector<std::pair<int, int>> execute_internal;
-  vector<std::pair<int, int>> cached;
+  	vector<nlj_artifact> nlj_log;
+	CompressedNLJArtifactList compressed_nlj_log;
 
-  std::pair<int, int> latest;
+    vector<std::pair<int, int>> execute_internal;
+    vector<std::pair<int, int>> cached;
+
+    std::pair<int, int> latest;
 
 private:
 };

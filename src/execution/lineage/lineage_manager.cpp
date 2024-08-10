@@ -123,6 +123,5 @@ void LineageManager::StoreQueryLineage(ClientContext &context, PhysicalOperator 
 	queryid_to_plan[query_id] = lineage_manager->global_logger[(void *)op];
   if (persist) CreateLineageTables(context, op, query_id);
 }
-
 } // namespace duckdb
 #endif

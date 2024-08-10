@@ -98,7 +98,7 @@ namespace duckdb {
 	    return value;
     }
 
-    void Compressed64List::PushBack(idx_t sel, idx_t artifact_size) {
+    void Compressed64List::PushBack(idx_t sel, size_t artifact_size) {
 	    // Deal with delta encoding for address
 	    if (artifact_size == 0) {
 		    base = sel & ~0x1ull;
@@ -159,7 +159,7 @@ namespace duckdb {
 		    new_compressed_list.base = sel & ~((1ull << (new_compressed_list.delta_bit_size)) - 1);
 
 		    idx_t curr_new_buffer_bit_size = 0;
-		    idx_t old_buffer_addr_cnt = 0;
+		    size_t old_buffer_addr_cnt = 0;
 
 		    while (old_buffer_addr_cnt < artifact_size) {
 
@@ -198,8 +198,23 @@ namespace duckdb {
     }
 
     idx_t Compressed64List::GetBytesSize() {
-	    return sizeof(delta_buffer) + sizeof(base) + sizeof(delta_bit_size) + sizeof(delta_buffer_size) + delta_buffer_size;
+	    return sizeof(Compressed64List) + delta_buffer_size;
     }
+
+    void Compressed64List::Resize(idx_t size_p) {
+	    idx_t new_buffer_size = (size_p * delta_bit_size + 7) / 8;
+	    unsigned char* new_delta_buffer = new unsigned char[new_buffer_size];
+
+	    std::memset(new_delta_buffer, 0, new_buffer_size);
+	    std::memcpy(new_delta_buffer, delta_buffer, new_buffer_size);
+
+	    delete[] delta_buffer;
+
+	    delta_buffer = new_delta_buffer;
+	    delta_buffer_size = new_buffer_size;
+    }
+
+
 }
 
 #endif

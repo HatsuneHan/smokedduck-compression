@@ -252,10 +252,16 @@ idx_t GroupedAggregateHashTable::AddChunk(DataChunk &groups, Vector &group_hashe
 	const auto new_group_count = FindOrCreateGroups(groups, group_hashes, state.addresses, state.new_groups);
 #ifdef LINEAGE
   if (lineage_manager->capture && active_log) {
-		auto ptrs = FlatVector::GetData<data_ptr_t>(state.addresses);
-		unique_ptr<data_ptr_t[]> addresses_copy(new data_ptr_t[groups.size()]);
-		std::copy(ptrs, ptrs + groups.size() , addresses_copy.get());
-		active_log->scatter_log.push_back({move(addresses_copy), groups.size()});
+	  	auto ptrs = FlatVector::GetData<data_ptr_t>(state.addresses);
+		if (lineage_manager->compress){
+			data_ptr_t* addresses_copy = new data_ptr_t[groups.size()];
+			std::copy(ptrs, ptrs + groups.size() , addresses_copy);
+			active_log->compressed_scatter_log.PushBack(reinterpret_cast<idx_t>(addresses_copy), groups.size());
+		} else {
+			unique_ptr<data_ptr_t[]> addresses_copy(new data_ptr_t[groups.size()]);
+			std::copy(ptrs, ptrs + groups.size() , addresses_copy.get());
+			active_log->scatter_log.push_back({move(addresses_copy), groups.size()});
+		}
     // TODO: capture child.out_start
 	}
 #endif

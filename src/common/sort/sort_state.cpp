@@ -307,25 +307,47 @@ void LocalSortState::ReOrder(SortedData &sd, data_ptr_t sorting_ptr, RowDataColl
 	const idx_t row_width = sd.layout.GetRowWidth();
 	const idx_t sorting_entry_size = gstate.sort_layout.entry_size;
 #ifdef LINEAGE
-	if (lineage_manager->capture && active_log && active_log->reorder_log.empty()) {
-    active_log->reorder_log.emplace_back();
-    vector<idx_t> &cur_lineage = active_log->reorder_log.back();
-    cur_lineage.resize(count);
-    for (idx_t i = 0; i < count; i++) {
-      auto index = Load<uint32_t>(sorting_ptr);
-      cur_lineage[i] = index;
-      FastMemcpy(ordered_data_ptr, unordered_data_ptr + index * row_width, row_width);
-      ordered_data_ptr += row_width;
-      sorting_ptr += sorting_entry_size;
-    }
-  } else {
-    for (idx_t i = 0; i < count; i++) {
-      auto index = Load<uint32_t>(sorting_ptr);
-      FastMemcpy(ordered_data_ptr, unordered_data_ptr + index * row_width, row_width);
-      ordered_data_ptr += row_width;
-      sorting_ptr += sorting_entry_size;
-    }
-  }
+	if(lineage_manager->compress){
+		if (lineage_manager->capture && active_log && active_log->compressed_reorder_log.empty()) {
+			active_log->compressed_reorder_log.emplace_back();
+			CompressedReorderLogArtifactList &cur_lineage = active_log->compressed_reorder_log.back();
+
+			for (idx_t i = 0; i < count; i++) {
+				auto index = Load<uint32_t>(sorting_ptr);
+				cur_lineage.PushBack(index);
+				FastMemcpy(ordered_data_ptr, unordered_data_ptr + index * row_width, row_width);
+				ordered_data_ptr += row_width;
+				sorting_ptr += sorting_entry_size;
+			}
+		} else {
+			for (idx_t i = 0; i < count; i++) {
+				auto index = Load<uint32_t>(sorting_ptr);
+				FastMemcpy(ordered_data_ptr, unordered_data_ptr + index * row_width, row_width);
+				ordered_data_ptr += row_width;
+				sorting_ptr += sorting_entry_size;
+			}
+		}
+	} else {
+		if (lineage_manager->capture && active_log && active_log->reorder_log.empty()) {
+			active_log->reorder_log.emplace_back();
+			vector<idx_t> &cur_lineage = active_log->reorder_log.back();
+			cur_lineage.resize(count);
+			for (idx_t i = 0; i < count; i++) {
+				auto index = Load<uint32_t>(sorting_ptr);
+				cur_lineage[i] = index;
+				FastMemcpy(ordered_data_ptr, unordered_data_ptr + index * row_width, row_width);
+				ordered_data_ptr += row_width;
+				sorting_ptr += sorting_entry_size;
+			}
+		} else {
+			for (idx_t i = 0; i < count; i++) {
+				auto index = Load<uint32_t>(sorting_ptr);
+				FastMemcpy(ordered_data_ptr, unordered_data_ptr + index * row_width, row_width);
+				ordered_data_ptr += row_width;
+				sorting_ptr += sorting_entry_size;
+			}
+		}
+	}
 #else
 	for (idx_t i = 0; i < count; i++) {
 		auto index = Load<uint32_t>(sorting_ptr);

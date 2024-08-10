@@ -416,9 +416,26 @@ OperatorResultType PhysicalNestedLoopJoin::ResolveComplexJoin(ExecutionContext &
 			chunk.Slice(right_payload, rvector, match_count, input.ColumnCount());
 #ifdef LINEAGE
       if (lineage_manager->capture && active_log) {
-        active_log->nlj_log.push_back({lvector.sel_data(), rvector.sel_data(), match_count, 
-             state.condition_scan_state.current_row_index, active_lop->children[0]->out_start});
-        active_log->SetLatestLSN({active_log->nlj_log.size(), 0});
+        if (lineage_manager->compress){
+			sel_t* lvector_copy = new sel_t[match_count];
+			std::copy(lvector.sel_data()->owned_data.get(), lvector.sel_data()->owned_data.get() + match_count, lvector_copy);
+
+			sel_t* rvector_copy = new sel_t[match_count];
+			std::copy(rvector.sel_data()->owned_data.get(), rvector.sel_data()->owned_data.get() + match_count, rvector_copy);
+
+			active_log->compressed_nlj_log.PushBack(reinterpret_cast<idx_t>(lvector_copy),
+					                                reinterpret_cast<idx_t>(rvector_copy),
+					                                match_count,
+				                                  state.condition_scan_state.current_row_index,
+					                                active_lop->children[0]->out_start);
+
+			active_log->SetLatestLSN({active_log->compressed_nlj_log.size, 0});
+
+		} else {
+			active_log->nlj_log.push_back({lvector.sel_data(), rvector.sel_data(), match_count,
+					                       state.condition_scan_state.current_row_index, active_lop->children[0]->out_start});
+			active_log->SetLatestLSN({active_log->nlj_log.size(), 0});
+		}
       }
 #endif
 		}

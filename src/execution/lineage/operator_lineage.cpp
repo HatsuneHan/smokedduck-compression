@@ -12,19 +12,38 @@ void OperatorLineage::PostProcess() {
 	}
 	switch (type) {
 	case PhysicalOperatorType::FILTER: {
-    for (int i=0; i < thread_vec.size(); i++) {
+    for (size_t i=0; i < thread_vec.size(); i++) {
       void* tkey = thread_vec[i];
-      if (log.count(tkey) == 0 || log[tkey]->filter_log.empty()) continue;
-      for (int k=0; k < log[tkey]->filter_log.size(); ++k) {
-        idx_t res_count = log[tkey]->filter_log[k].count;
-        idx_t offset = log[tkey]->filter_log[k].in_start;
-        if (log[tkey]->filter_log[k].sel) {
-          auto payload = log[tkey]->filter_log[k].sel.get();
-          for (idx_t j=0; j < res_count; ++j) {
-              payload[j] += offset;
-          }
-        }
-      }
+      if (lineage_manager->compress){
+		  if (log.count(tkey) == 0 || log[tkey]->compressed_filter_log.size == 0){
+			  continue;
+		  }
+		  for (size_t k=0; k < log[tkey]->compressed_filter_log.size; ++k) {
+			  idx_t res_count = log[tkey]->compressed_filter_log.artifacts->count[k];
+			  idx_t offset = log[tkey]->compressed_filter_log.artifacts->in_start[k];
+			  idx_t payload_num = log[tkey]->compressed_filter_log.artifacts->sel[k];
+			  if (payload_num) {
+				  auto payload = reinterpret_cast<sel_t*>(payload_num);
+				  for (idx_t j=0; j < res_count; ++j) {
+					  payload[j] += offset;
+				  }
+			  }
+		  }
+	  } else {
+		  if (log.count(tkey) == 0 || log[tkey]->filter_log.empty()){
+			  continue;
+		  }
+		  for (size_t k=0; k < log[tkey]->filter_log.size(); ++k) {
+			  idx_t res_count = log[tkey]->filter_log[k].count;
+			  idx_t offset = log[tkey]->filter_log[k].in_start;
+			  if (log[tkey]->filter_log[k].sel) {
+				  auto payload = log[tkey]->filter_log[k].sel.get();
+				  for (idx_t j=0; j < res_count; ++j) {
+					  payload[j] += offset;
+				  }
+			  }
+		  }
+	  }
     }
     break;
                                      }
@@ -34,16 +53,17 @@ void OperatorLineage::PostProcess() {
     break;
                                     }
 	case PhysicalOperatorType::TABLE_SCAN: {
-    for (int i=0; i < thread_vec.size(); i++) {
+    for (size_t i=0; i < thread_vec.size(); i++) {
       void* tkey = thread_vec[i];
       if (lineage_manager->compress){
 		  if (log.count(tkey) == 0 || log[tkey]->compressed_row_group_log.size == 0) {
 			  continue;
 		  }
-		  for (int k=0; k < log[tkey]->compressed_row_group_log.size; ++k) {
-			  idx_t res_count = log[tkey]->compressed_row_group_log.count[k];
-			  idx_t offset = log[tkey]->compressed_row_group_log.start[k] + log[tkey]->compressed_row_group_log.vector_index[k];
-			  idx_t payload_num = log[tkey]->compressed_row_group_log.sel_addr[k];
+		  for (size_t k=0; k < log[tkey]->compressed_row_group_log.size; ++k) {
+			  idx_t res_count = log[tkey]->compressed_row_group_log.artifacts->count[k];
+			  idx_t offset = log[tkey]->compressed_row_group_log.artifacts->start[k]
+					         + log[tkey]->compressed_row_group_log.artifacts->vector_index[k];
+			  idx_t payload_num = log[tkey]->compressed_row_group_log.artifacts->sel[k];
 			  if (payload_num) {
 				  auto payload = reinterpret_cast<sel_t*>(payload_num);
 				  for (idx_t j=0; j < res_count; ++j) {
@@ -55,7 +75,7 @@ void OperatorLineage::PostProcess() {
 		  if (log.count(tkey) == 0 || log[tkey]->row_group_log.empty()){
 			  continue;
 		  }
-		  for (int k=0; k < log[tkey]->row_group_log.size(); ++k) {
+		  for (size_t k=0; k < log[tkey]->row_group_log.size(); ++k) {
 			  idx_t res_count = log[tkey]->row_group_log[k].count;
 			  idx_t offset = log[tkey]->row_group_log[k].start + log[tkey]->row_group_log[k].vector_index;
 			  if (log[tkey]->row_group_log[k].sel) {
@@ -72,40 +92,82 @@ void OperatorLineage::PostProcess() {
 	case PhysicalOperatorType::HASH_GROUP_BY:
 	case PhysicalOperatorType::PERFECT_HASH_GROUP_BY: {
     // gather
-    for (int i=0; i < thread_vec.size(); i++) {
+    for (size_t i=0; i < thread_vec.size(); i++) {
       void* tkey = thread_vec[i];
-      if (log.count(tkey) == 0 || log[tkey]->finalize_states_log.empty()) continue;
-      idx_t count_so_far = 0;
-      for (int k=0; k < log[tkey]->finalize_states_log.size(); ++k) {
-        idx_t res_count = log[tkey]->finalize_states_log[k].count;
-        // std::cout << count_so_far+res_count << " finalize states: " << tkey << " " << log[tkey]->finalize_states_log.size() << std::endl;
-        auto payload = log[tkey]->finalize_states_log[k].addresses.get();
-        for (idx_t j=0; j < res_count; ++j) {
-          if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
-            log_index->codes[payload[j]] = j + count_so_far;
-            // TODO: add tkey associasted with this code
-            //std::cout << "gather: " << k << " " << log_index->codes[payload[j]] << " " << j << " " << (void*)payload[j] << std::endl;
-          }
-        }
-        count_so_far += res_count;
-      }
+      if (lineage_manager->compress){
+		  if (log.count(tkey) == 0 || log[tkey]->compressed_finalize_states_log.size == 0){
+			  continue;
+		  }
+		  idx_t count_so_far = 0;
+		  for (size_t k=0; k < log[tkey]->compressed_finalize_states_log.size; ++k) {
+			  idx_t res_count = log[tkey]->compressed_finalize_states_log.artifacts->count[k];
+			  // std::cout << count_so_far+res_count << " finalize states: " << tkey << " " << log[tkey]->finalize_states_log.size() << std::endl;
+			  auto payload = reinterpret_cast<data_ptr_t*>(log[tkey]->compressed_finalize_states_log.artifacts->addresses[k]);
+			  for (idx_t j=0; j < res_count; ++j) {
+				  if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
+					  log_index->codes[payload[j]] = j + count_so_far;
+					  // TODO: add tkey associasted with this code
+					  //std::cout << "gather: " << k << " " << log_index->codes[payload[j]] << " " << j << " " << (void*)payload[j] << std::endl;
+				  }
+			  }
+			  count_so_far += res_count;
+		  }
+		  log[tkey]->compressed_finalize_states_log.Clear();
+
+	  } else {
+		  if (log.count(tkey) == 0 || log[tkey]->finalize_states_log.empty()){
+			  continue;
+		  }
+		  idx_t count_so_far = 0;
+		  for (size_t k=0; k < log[tkey]->finalize_states_log.size(); ++k) {
+			  idx_t res_count = log[tkey]->finalize_states_log[k].count;
+			  // std::cout << count_so_far+res_count << " finalize states: " << tkey << " " << log[tkey]->finalize_states_log.size() << std::endl;
+			  auto payload = log[tkey]->finalize_states_log[k].addresses.get();
+			  for (idx_t j=0; j < res_count; ++j) {
+				  if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
+					  log_index->codes[payload[j]] = j + count_so_far;
+					  // TODO: add tkey associasted with this code
+					  //std::cout << "gather: " << k << " " << log_index->codes[payload[j]] << " " << j << " " << (void*)payload[j] << std::endl;
+				  }
+			  }
+			  count_so_far += res_count;
+		  }
+		  log[tkey]->finalize_states_log.clear();
+	  }
       // free gather
-      log[tkey]->finalize_states_log.clear();
+
     }      
-    for (int i=0; i < thread_vec.size(); i++) {
+    for (size_t i=0; i < thread_vec.size(); i++) {
       void* tkey = thread_vec[i];
-      if (log.count(tkey) == 0 || log[tkey]->combine_log.empty()) continue;
-      //std::cout << "combine states: " << log[tkey]->combine_log.size() << std::endl;
-      for (int k=0; k < log[tkey]->combine_log.size(); ++k) {
-        idx_t res_count = log[tkey]->combine_log[k].count;
-        auto src = log[tkey]->combine_log[k].src.get();
-        auto target = log[tkey]->combine_log[k].target.get();
-        for (idx_t j=0; j < res_count; ++j) {
-          log_index->codes[src[j]] = log_index->codes[target[j]];
-        }
-      }
-      // free combine
-      log[tkey]->combine_log.clear();
+      if (lineage_manager->compress){
+		  if (log.count(tkey) == 0 || log[tkey]->compressed_combine_log.size == 0){
+			  continue;
+		  }
+		  for (size_t k=0; k < log[tkey]->compressed_combine_log.size; ++k) {
+			  idx_t res_count = log[tkey]->compressed_combine_log.artifacts->count[k];
+			  auto src = reinterpret_cast<data_ptr_t*>(log[tkey]->compressed_combine_log.artifacts->src[k]);
+			  auto target = reinterpret_cast<data_ptr_t*>(log[tkey]->compressed_combine_log.artifacts->target[k]);
+			  for (idx_t j=0; j < res_count; ++j) {
+				  log_index->codes[src[j]] = log_index->codes[target[j]];
+			  }
+		  }
+		  log[tkey]->compressed_combine_log.Clear();
+	  } else {
+		  if (log.count(tkey) == 0 || log[tkey]->combine_log.empty()){
+			  continue;
+		  }
+		  //std::cout << "combine states: " << log[tkey]->combine_log.size() << std::endl;
+		  for (size_t k=0; k < log[tkey]->combine_log.size(); ++k) {
+			  idx_t res_count = log[tkey]->combine_log[k].count;
+			  auto src = log[tkey]->combine_log[k].src.get();
+			  auto target = log[tkey]->combine_log[k].target.get();
+			  for (idx_t j=0; j < res_count; ++j) {
+				  log_index->codes[src[j]] = log_index->codes[target[j]];
+			  }
+		  }
+		  // free combine
+		  log[tkey]->combine_log.clear();
+	  }
     }      
 
     // std::cout << " done " << std::endl;
@@ -113,147 +175,304 @@ void OperatorLineage::PostProcess() {
   }
 	case PhysicalOperatorType::ORDER_BY: {
     idx_t count_so_far = 0;
-    for (int i=0; i < thread_vec.size(); i++) {
+    for (size_t i=0; i < thread_vec.size(); i++) {
       void* tkey = thread_vec[i];
-      if (log.count(tkey) == 0 || log[tkey]->reorder_log.empty()) continue;
-      for (int k = 0; k < log[tkey]->reorder_log.size(); k++) {
-        // std::cout << k << "Order : " << log[tkey]->reorder_log.size() << " " << count_so_far << " " << log[tkey]->reorder_log[k].size() << std::endl;
-        idx_t res_count = log[tkey]->reorder_log[k].size();
-        for (idx_t j=0; j < res_count; ++j) {
-            log_index->vals.push_back( log[tkey]->reorder_log[k][j] + count_so_far );
-        }
-        count_so_far += res_count;
-      }
-      log[tkey]->reorder_log.clear();
+      if(lineage_manager->compress){
+		  if (log.count(tkey) == 0 || log[tkey]->compressed_reorder_log.empty()){
+			  continue;
+		  }
+		  for (size_t k = 0; k < log[tkey]->compressed_reorder_log.size(); k++) {
+			  idx_t res_count = log[tkey]->compressed_reorder_log[k].size;
+			  for (idx_t j=0; j < res_count; ++j) {
+				  log_index->vals.push_back( log[tkey]->compressed_reorder_log[k].artifacts->index[j] + count_so_far );
+			  }
+			  count_so_far += res_count;
+		  }
+		  log[tkey]->compressed_reorder_log.clear();
+	  } else {
+		  if (log.count(tkey) == 0 || log[tkey]->reorder_log.empty()){
+			  continue;
+		  }
+		  for (size_t k = 0; k < log[tkey]->reorder_log.size(); k++) {
+			  // std::cout << k << "Order : " << log[tkey]->reorder_log.size() << " " << count_so_far << " " << log[tkey]->reorder_log[k].size() << std::endl;
+			  idx_t res_count = log[tkey]->reorder_log[k].size();
+			  for (idx_t j=0; j < res_count; ++j) {
+				  log_index->vals.push_back( log[tkey]->reorder_log[k][j] + count_so_far );
+			  }
+			  count_so_far += res_count;
+		  }
+		  log[tkey]->reorder_log.clear();
+	  }
     }
 		break;
 	}
 	case PhysicalOperatorType::HASH_JOIN: {
-    for (int i=0; i < thread_vec.size(); i++) {
+    for (size_t i=0; i < thread_vec.size(); i++) {
       void* tkey = thread_vec[i];
-      idx_t count_so_far = 0;
-      if (log.count(tkey) == 0 || log[tkey]->scatter_sel_log.empty()) continue;
-      // std::cout << "Scatter Join: " << log[tkey]->scatter_sel_log.size() << std::endl;
-      for (int k = 0; k < log[tkey]->scatter_sel_log.size(); k++) {
-        idx_t res_count = log[tkey]->scatter_sel_log[k].count;
-        idx_t in_start = log[tkey]->scatter_sel_log[k].in_start;
-        auto payload = log[tkey]->scatter_sel_log[k].addresses.get();
-        //std::cout << k << " " << res_count << std::endl;
-        if (log[tkey]->scatter_sel_log[k].sel) {
-          auto sel = log[tkey]->scatter_sel_log[k].sel.get();
-          for (idx_t j=0; j < res_count; ++j) {
-            if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
-              log_index->codes[payload[j]] = sel[j] + in_start;
-              //std::cout << "gather: " << k << " " << log_index->codes[payload[j]] << " " << j << " " << (void*)payload[j] << std::endl;
-            }
-          }
-        } else {
-          for (idx_t j=0; j < res_count; ++j) {
-            if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
-              log_index->codes[payload[j]] = j + in_start;
-              //std::cout << "gather: " << k << " " << log_index->codes[payload[j]] << " " << j << " " << (void*)payload[j] << std::endl;
-            }
-          }
-        }
-      }
+      if (lineage_manager->compress) {
+		  if (log.count(tkey) == 0 || log[tkey]->compressed_scatter_sel_log.size == 0){
+			  continue;
+		  }
+		  for (size_t k = 0; k < log[tkey]->compressed_scatter_sel_log.size; k++) {
+			  idx_t res_count = log[tkey]->compressed_scatter_sel_log.artifacts->count[k];
+			  idx_t in_start = log[tkey]->compressed_scatter_sel_log.artifacts->in_start[k];
+			  auto payload = reinterpret_cast<data_ptr_t*>(log[tkey]->compressed_scatter_sel_log.artifacts->addresses[k]);
+			  idx_t sel_num = log[tkey]->compressed_scatter_sel_log.artifacts->sel[k];
+
+			  if (sel_num) {
+				  auto sel = reinterpret_cast<sel_t*>(sel_num);
+				  for (idx_t j=0; j < res_count; ++j) {
+					  if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
+						  log_index->codes[payload[j]] = sel[j] + in_start;
+						  //std::cout << "gather: " << k << " " << log_index->codes[payload[j]] << " " << j << " " << (void*)payload[j] << std::endl;
+					  }
+				  }
+			  } else {
+				  for (idx_t j=0; j < res_count; ++j) {
+					  if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
+						  log_index->codes[payload[j]] = j + in_start;
+						  //std::cout << "gather: " << k << " " << log_index->codes[payload[j]] << " " << j << " " << (void*)payload[j] << std::endl;
+					  }
+				  }
+			  }
+		  }
+	  } else {
+		  if (log.count(tkey) == 0 || log[tkey]->scatter_sel_log.empty()){
+			  continue;
+		  }
+		  for (size_t k = 0; k < log[tkey]->scatter_sel_log.size(); k++) {
+			  idx_t res_count = log[tkey]->scatter_sel_log[k].count;
+			  idx_t in_start = log[tkey]->scatter_sel_log[k].in_start;
+			  auto payload = log[tkey]->scatter_sel_log[k].addresses.get();
+			  //std::cout << k << " " << res_count << std::endl;
+			  if (log[tkey]->scatter_sel_log[k].sel) {
+				  auto sel = log[tkey]->scatter_sel_log[k].sel.get();
+				  for (idx_t j=0; j < res_count; ++j) {
+					  if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
+						  log_index->codes[payload[j]] = sel[j] + in_start;
+						  //std::cout << "gather: " << k << " " << log_index->codes[payload[j]] << " " << j << " " << (void*)payload[j] << std::endl;
+					  }
+				  }
+			  } else {
+				  for (idx_t j=0; j < res_count; ++j) {
+					  if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
+						  log_index->codes[payload[j]] = j + in_start;
+						  //std::cout << "gather: " << k << " " << log_index->codes[payload[j]] << " " << j << " " << (void*)payload[j] << std::endl;
+					  }
+				  }
+			  }
+		  }
+	  }
     }
-    for (int i=0; i < thread_vec.size(); i++) {
+    for (size_t i=0; i < thread_vec.size(); i++) {
       void* tkey = thread_vec[i];
-      if (log.count(tkey) == 0 || log[tkey]->perfect_full_scan_ht_log.empty()) continue;
-     // std::cout << "Perfect Join: " << log[tkey]->perfect_full_scan_ht_log.size() << std::endl;
-      for (int k = 0; k < log[tkey]->perfect_full_scan_ht_log.size(); k++) {
-        idx_t key_count = log[tkey]->perfect_full_scan_ht_log[k].key_count;
-        idx_t ht_count = log[tkey]->perfect_full_scan_ht_log[k].ht_count;
-       //  std::cout << k << " " << key_count << " " << ht_count << std::endl;
-        for (int e=0; e < key_count; e++) {
-          idx_t build_idx = log[tkey]->perfect_full_scan_ht_log[k].sel_build->owned_data.get()[e];
-          idx_t tuples_idx = log[tkey]->perfect_full_scan_ht_log[k].sel_tuples->owned_data.get()[e];
-          data_ptr_t* ptr = (data_ptr_t*)log[tkey]->perfect_full_scan_ht_log[k].row_locations->GetData();
-         // std::cout << "-> " << build_idx << " " << tuples_idx << " " << key_count << " " << ht_count  << std::endl;
-         // TODO: check if this is correct. follow old implementation
-         log_index->perfect_codes[build_idx] = log_index->codes[ptr[tuples_idx]];
-         // std::cout << "-> " << (void*)ptr[ tuples_idx ]  << std::endl;
-        }
-      }
+      if (lineage_manager->compress){
+		  if (log.count(tkey) == 0 || log[tkey]->compressed_perfect_full_scan_ht_log.size == 0){
+			  continue;
+		  }
+		  for (size_t k = 0; k < log[tkey]->compressed_perfect_full_scan_ht_log.size; k++) {
+			  idx_t key_count = log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->key_count[k];
+			  idx_t ht_count = log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->ht_count[k];
+			  data_ptr_t* ptr = reinterpret_cast<data_ptr_t*>(log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->row_locations[k]);
+
+			  for (idx_t e=0; e < key_count; e++) {
+				  idx_t build_idx = reinterpret_cast<sel_t*>(log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->sel_build[k])[e];
+				  idx_t tuples_idx = reinterpret_cast<sel_t*>(log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->sel_tuples[k])[e];
+				  // TODO: check if this is correct. follow old implementation
+				  log_index->perfect_codes[build_idx] = log_index->codes[ptr[tuples_idx]];
+
+			  }
+		  }
+
+	  } else {
+		  if (log.count(tkey) == 0 || log[tkey]->perfect_full_scan_ht_log.empty()){
+			  continue;
+		  }
+		  // std::cout << "Perfect Join: " << log[tkey]->perfect_full_scan_ht_log.size() << std::endl;
+		  for (size_t k = 0; k < log[tkey]->perfect_full_scan_ht_log.size(); k++) {
+			  idx_t key_count = log[tkey]->perfect_full_scan_ht_log[k].key_count;
+			  idx_t ht_count = log[tkey]->perfect_full_scan_ht_log[k].ht_count;
+			  //  std::cout << k << " " << key_count << " " << ht_count << std::endl;
+			  for (idx_t e=0; e < key_count; e++) {
+				  idx_t build_idx = log[tkey]->perfect_full_scan_ht_log[k].sel_build->owned_data.get()[e];
+				  idx_t tuples_idx = log[tkey]->perfect_full_scan_ht_log[k].sel_tuples->owned_data.get()[e];
+				  data_ptr_t* ptr = (data_ptr_t*)log[tkey]->perfect_full_scan_ht_log[k].row_locations->GetData();
+				  // std::cout << "-> " << build_idx << " " << tuples_idx << " " << key_count << " " << ht_count  << std::endl;
+				  // TODO: check if this is correct. follow old implementation
+				  log_index->perfect_codes[build_idx] = log_index->codes[ptr[tuples_idx]];
+				  // std::cout << "-> " << (void*)ptr[ tuples_idx ]  << std::endl;
+			  }
+		  }
+	  }
     }
-    for (int i=0; i < thread_vec.size(); i++) {
+    for (size_t i=0; i < thread_vec.size(); i++) {
       int count_so_far = 0;
       void* tkey = thread_vec[i];
-      if (log.count(tkey) == 0 || log[tkey]->perfect_probe_ht_log.empty()) continue;
-      //std::cout << "Perfect Probe Join: " << log[tkey]->perfect_probe_ht_log.size() << " " << log[tkey]->execute_internal.size() << std::endl;
-      for (int k = 0; k < log[tkey]->execute_internal.size(); k++) {
-        int lsn = log[tkey]->execute_internal[k].first-1;
-        //std::cout << "lsn: " << lsn << " " << k << std::endl;
-        idx_t count = log[tkey]->perfect_probe_ht_log[lsn].count;
-        idx_t in_start = log[tkey]->perfect_probe_ht_log[lsn].in_start;
-       // std::cout << operator_id << " " << k << " " << count << " " << in_start << " " << count_so_far <<  std::endl;
-        auto left = log[tkey]->perfect_probe_ht_log[lsn].left.get();
-        auto right = log[tkey]->perfect_probe_ht_log[lsn].right.get();
-        if (left == nullptr) {
-          for (idx_t j=0; j < count; ++j) {
-            log_index->vals.push_back( log_index->perfect_codes[ right[j] ]  );
-            log_index->vals_2.push_back( j + in_start );
-          }
-        } else {
-          for (idx_t j=0; j < count; ++j) {
-            log_index->vals.push_back( log_index->perfect_codes[ right[j] ]  );
-            log_index->vals_2.push_back( left[j] + in_start );
-          }
-        }
-        count_so_far += count;
-      }
-      log[tkey]->perfect_probe_ht_log.clear();
+      if (lineage_manager->compress){
+		  if (log.count(tkey) == 0 || log[tkey]->compressed_perfect_probe_ht_log.size == 0){
+			  continue;
+		  }
+		  for (size_t k = 0; k < log[tkey]->execute_internal.size(); k++) {
+			  int lsn = log[tkey]->execute_internal[k].first-1;
+
+			  idx_t count = log[tkey]->compressed_perfect_probe_ht_log.artifacts->count[lsn];
+			  idx_t in_start = log[tkey]->compressed_perfect_probe_ht_log.artifacts->in_start[lsn];
+
+			  auto left = reinterpret_cast<sel_t*>(log[tkey]->compressed_perfect_probe_ht_log.artifacts->left[lsn]);
+			  auto right = reinterpret_cast<sel_t*>(log[tkey]->compressed_perfect_probe_ht_log.artifacts->right[lsn]);
+
+			  if (left == nullptr) {
+				  for (idx_t j=0; j < count; ++j) {
+					  log_index->vals.push_back( log_index->perfect_codes[ right[j] ]  );
+					  log_index->vals_2.push_back( j + in_start );
+				  }
+			  } else {
+				  for (idx_t j=0; j < count; ++j) {
+					  log_index->vals.push_back( log_index->perfect_codes[ right[j] ]  );
+					  log_index->vals_2.push_back( left[j] + in_start );
+				  }
+			  }
+			  count_so_far += count;
+		  }
+		  log[tkey]->compressed_perfect_probe_ht_log.Clear();
+	  } else {
+		  if (log.count(tkey) == 0 || log[tkey]->perfect_probe_ht_log.empty()){
+			  continue;
+		  }
+		  //std::cout << "Perfect Probe Join: " << log[tkey]->perfect_probe_ht_log.size() << " " << log[tkey]->execute_internal.size() << std::endl;
+		  for (size_t k = 0; k < log[tkey]->execute_internal.size(); k++) {
+			  int lsn = log[tkey]->execute_internal[k].first-1;
+			  //std::cout << "lsn: " << lsn << " " << k << std::endl;
+			  idx_t count = log[tkey]->perfect_probe_ht_log[lsn].count;
+			  idx_t in_start = log[tkey]->perfect_probe_ht_log[lsn].in_start;
+			  // std::cout << operator_id << " " << k << " " << count << " " << in_start << " " << count_so_far <<  std::endl;
+			  auto left = log[tkey]->perfect_probe_ht_log[lsn].left.get();
+			  auto right = log[tkey]->perfect_probe_ht_log[lsn].right.get();
+			  if (left == nullptr) {
+				  for (idx_t j=0; j < count; ++j) {
+					  log_index->vals.push_back( log_index->perfect_codes[ right[j] ]  );
+					  log_index->vals_2.push_back( j + in_start );
+				  }
+			  } else {
+				  for (idx_t j=0; j < count; ++j) {
+					  log_index->vals.push_back( log_index->perfect_codes[ right[j] ]  );
+					  log_index->vals_2.push_back( left[j] + in_start );
+				  }
+			  }
+			  count_so_far += count;
+		  }
+		  log[tkey]->perfect_probe_ht_log.clear();
+	  }
       log[tkey]->execute_internal.clear();
     }
+
     int count_so_far = 0;
-    for (int i=0; i < thread_vec.size(); i++) {
+    for (size_t i=0; i < thread_vec.size(); i++) {
       void* tkey = thread_vec[i];
-      if (log.count(tkey) == 0 || log[tkey]->join_gather_log.empty()) continue;
-      // std::cout << "Join: " << log[tkey]->join_gather_log.size() << std::endl;
-      for (int k = 0; k < log[tkey]->execute_internal.size(); k++) {
-        int lsn = log[tkey]->execute_internal[k].first-1;
-        idx_t res_count = log[tkey]->join_gather_log[lsn].count;
-        idx_t in_start = log[tkey]->join_gather_log[lsn].in_start;
-        auto payload = log[tkey]->join_gather_log[lsn].rhs.get();
-        auto lhs = log[tkey]->join_gather_log[lsn].lhs.get();
-        // std::cout << operator_id << " " <<  k << " " << res_count << " " << count_so_far << std::endl;
-        for (idx_t j=0; j < res_count; ++j) {
-          if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
-            // std::cout << "probe: " << j<< " " << lhs[j] << " " << res_count <<  " " << (void*)payload[j] << std::endl;
-          }
-          log_index->vals.push_back( log_index->codes[ payload[j] ] );
-          log_index->vals_2.push_back( lhs[j] + in_start );
-        }
-        count_so_far += res_count;
-      }
-      log[tkey]->join_gather_log.clear();
+      if (lineage_manager->compress) {
+		  if (log.count(tkey) == 0 || log[tkey]->compressed_join_gather_log.size == 0){
+			  continue;
+		  }
+		  for (size_t k = 0; k < log[tkey]->execute_internal.size(); k++) {
+			  int lsn = log[tkey]->execute_internal[k].first-1;
+
+			  idx_t res_count = log[tkey]->compressed_join_gather_log.artifacts->count[lsn];
+			  idx_t in_start = log[tkey]->compressed_join_gather_log.artifacts->in_start[lsn];
+			  auto payload = reinterpret_cast<data_ptr_t*>(log[tkey]->compressed_join_gather_log.artifacts->rhs[lsn]);
+			  auto lhs = reinterpret_cast<sel_t*>(log[tkey]->compressed_join_gather_log.artifacts->lhs[lsn]);
+
+			  // std::cout << operator_id << " " <<  k << " " << res_count << " " << count_so_far << std::endl;
+			  for (idx_t j=0; j < res_count; ++j) {
+				  if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
+					  // std::cout << "probe: " << j<< " " << lhs[j] << " " << res_count <<  " " << (void*)payload[j] << std::endl;
+				  }
+				  log_index->vals.push_back( log_index->codes[ payload[j] ] );
+				  log_index->vals_2.push_back( lhs[j] + in_start );
+			  }
+			  count_so_far += res_count;
+		  }
+		  log[tkey]->compressed_join_gather_log.Clear();
+	  } else {
+		  if (log.count(tkey) == 0 || log[tkey]->join_gather_log.empty()){
+			  continue;
+		  }
+		  // std::cout << "Join: " << log[tkey]->join_gather_log.size() << std::endl;
+		  for (size_t k = 0; k < log[tkey]->execute_internal.size(); k++) {
+			  int lsn = log[tkey]->execute_internal[k].first-1;
+			  idx_t res_count = log[tkey]->join_gather_log[lsn].count;
+			  idx_t in_start = log[tkey]->join_gather_log[lsn].in_start;
+			  auto payload = log[tkey]->join_gather_log[lsn].rhs.get();
+			  auto lhs = log[tkey]->join_gather_log[lsn].lhs.get();
+			  // std::cout << operator_id << " " <<  k << " " << res_count << " " << count_so_far << std::endl;
+			  for (idx_t j=0; j < res_count; ++j) {
+				  if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
+					  // std::cout << "probe: " << j<< " " << lhs[j] << " " << res_count <<  " " << (void*)payload[j] << std::endl;
+				  }
+				  log_index->vals.push_back( log_index->codes[ payload[j] ] );
+				  log_index->vals_2.push_back( lhs[j] + in_start );
+			  }
+			  count_so_far += res_count;
+		  }
+		  log[tkey]->join_gather_log.clear();
+	  }
     }
     // std::cout << operator_id << " log_index: " << log_index->vals.size() << std::endl;
     break;
   }
 	case PhysicalOperatorType::NESTED_LOOP_JOIN: {
-    for (int i=0; i < thread_vec.size(); i++) {
+    for (size_t i=0; i < thread_vec.size(); i++) {
       void* tkey = thread_vec[i];
-      if (log.count(tkey) == 0 || log[tkey]->nlj_log.empty()) continue;
-      for (int k=0; k < log[tkey]->nlj_log.size(); ++k) {
-        idx_t count = log[tkey]->nlj_log[k].count;
-        idx_t offset = log[tkey]->nlj_log[k].out_start;
 
-        if (log[tkey]->nlj_log[k].left != nullptr) {
-          auto vec_ptr = log[tkey]->nlj_log[k].left->owned_data.get();
-          for (idx_t i=0; i < count; i++) {
-            *(vec_ptr + i) += offset;
-          }
-        }
-        
-        idx_t current_row_index = log[tkey]->nlj_log[k].current_row_index;
-        if (log[tkey]->nlj_log[k].right != nullptr && current_row_index != 0) {
-          auto vec_ptr = log[tkey]->nlj_log[k].right->owned_data.get();
-          for (idx_t i=0; i < count; i++) {
-            *(vec_ptr + i) += current_row_index;
-          }
-        }
-      }
+      if(lineage_manager->compress){
+		  if (log.count(tkey) == 0 || log[tkey]->compressed_nlj_log.size == 0){
+			  continue;
+		  }
+		  for (size_t k=0; k < log[tkey]->compressed_nlj_log.size; ++k) {
+			  idx_t count = log[tkey]->compressed_nlj_log.artifacts->count[k];
+			  idx_t offset = log[tkey]->compressed_nlj_log.artifacts->out_start[k];
+
+			  idx_t left_addr_num = log[tkey]->compressed_nlj_log.artifacts->left[k];
+			  if (left_addr_num != 0) {
+				  auto vec_ptr = reinterpret_cast<sel_t*>(left_addr_num);
+				  for (idx_t j=0; j < count; j++) {
+					  *(vec_ptr + j) += offset;
+				  }
+			  }
+
+			  idx_t current_row_index = log[tkey]->compressed_nlj_log.artifacts->current_row_index[k];
+
+			  idx_t right_addr_num = log[tkey]->compressed_nlj_log.artifacts->right[k];
+			  if (right_addr_num != 0 && current_row_index != 0) {
+				  auto vec_ptr = reinterpret_cast<sel_t*>(right_addr_num);
+				  for (idx_t j=0; j < count; j++) {
+					  *(vec_ptr + j) += current_row_index;
+				  }
+			  }
+		  }
+	  } else {
+		  if (log.count(tkey) == 0 || log[tkey]->nlj_log.empty()){
+			  continue;
+		  }
+		  for (size_t k=0; k < log[tkey]->nlj_log.size(); ++k) {
+			  idx_t count = log[tkey]->nlj_log[k].count;
+			  idx_t offset = log[tkey]->nlj_log[k].out_start;
+
+			  if (log[tkey]->nlj_log[k].left != nullptr) {
+				  auto vec_ptr = log[tkey]->nlj_log[k].left->owned_data.get();
+				  for (idx_t j=0; j < count; j++) {
+					  *(vec_ptr + j) += offset;
+				  }
+			  }
+
+			  idx_t current_row_index = log[tkey]->nlj_log[k].current_row_index;
+			  if (log[tkey]->nlj_log[k].right != nullptr && current_row_index != 0) {
+				  auto vec_ptr = log[tkey]->nlj_log[k].right->owned_data.get();
+				  for (idx_t j=0; j < count; j++) {
+					  *(vec_ptr + j) += current_row_index;
+				  }
+			  }
+		  }
+	  }
     }
     break;
   }
@@ -365,27 +584,44 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
 	switch (type) {
 	// schema: [INTEGER in_index, INTEGER out_index, INTEGER partition_index]
 	case PhysicalOperatorType::FILTER: {
-    if (data_idx >= log->filter_log.size()) return 0;
-    int lsn = log->execute_internal[data_idx].first-1;
-    // std::cout << "filter: " << data_idx << " " << lsn << std::endl;
-    idx_t count = log->filter_log[lsn].count;
-    idx_t offset = log->filter_log[lsn].in_start;
-    data_ptr_t ptr = nullptr;
-    if (log->filter_log[lsn].sel) {
-      ptr = (data_ptr_t)log->filter_log[lsn].sel.get();
-    }
+		idx_t count;
+		idx_t offset;
+		data_ptr_t ptr = nullptr;
+		if(lineage_manager->compress){
+			if (data_idx >= log->compressed_filter_log.size){
+				return 0;
+			}
+			int lsn = log->execute_internal[data_idx].first-1;
+			count = log->compressed_filter_log.artifacts->count[lsn];
+			offset = log->compressed_filter_log.artifacts->in_start[lsn];
+			idx_t ptr_num = log->compressed_filter_log.artifacts->sel[lsn];
+			if (ptr_num) {
+				ptr = reinterpret_cast<data_ptr_t>(ptr_num);
+			}
+		} else {
+			if (data_idx >= log->filter_log.size()){
+				return 0;
+			}
+			int lsn = log->execute_internal[data_idx].first-1;
+			// std::cout << "filter: " << data_idx << " " << lsn << std::endl;
+			count = log->filter_log[lsn].count;
+			offset = log->filter_log[lsn].in_start;
+			if (log->filter_log[lsn].sel) {
+				ptr = (data_ptr_t)log->filter_log[lsn].sel.get();
+			}
+		}
 
-    chunk.SetCardinality(count);
-    if (ptr != nullptr) {
-      Vector in_index(LogicalType::INTEGER, ptr);
-      chunk.data[0].Reference(in_index);
-    } else {
-      chunk.data[0].Sequence(offset, 1, count); // in_index
-    }
-    chunk.data[1].Sequence(global_count, 1, count); // out_index
-    chunk.data[2].Reference(thread_id_vec);
-    break;
-  }
+		chunk.SetCardinality(count);
+		if (ptr != nullptr) {
+		  Vector in_index(LogicalType::INTEGER, ptr);
+		  chunk.data[0].Reference(in_index);
+		} else {
+		  chunk.data[0].Sequence(offset, 1, count); // in_index
+		}
+		chunk.data[1].Sequence(global_count, 1, count); // out_index
+		chunk.data[2].Reference(thread_id_vec);
+		break;
+	  }
 	case PhysicalOperatorType::TABLE_SCAN: {
 	idx_t count;
 	idx_t offset;
@@ -394,10 +630,11 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
 		if (data_idx >= log->compressed_row_group_log.size){
 			return 0;
 		}
-		count = log->compressed_row_group_log.count[data_idx];
-		offset = log->compressed_row_group_log.start[data_idx] + log->compressed_row_group_log.vector_index[data_idx];
+		count = log->compressed_row_group_log.artifacts->count[data_idx];
+		offset = log->compressed_row_group_log.artifacts->start[data_idx]
+			     + log->compressed_row_group_log.artifacts->vector_index[data_idx];
 		ptr = nullptr;
-		idx_t ptr_num = log->compressed_row_group_log.sel_addr[data_idx];
+		idx_t ptr_num = log->compressed_row_group_log.artifacts->sel[data_idx];
 		if (ptr_num) {
 			ptr = reinterpret_cast<data_ptr_t>(ptr_num);
 		}
@@ -427,11 +664,28 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
   }
   case PhysicalOperatorType::STREAMING_LIMIT:
   case PhysicalOperatorType::LIMIT: {
-    if (data_idx >= log->limit_offset.size()) return 0;
+	  idx_t start;
+	  idx_t count;
+	  idx_t offset;
+    if (lineage_manager->compress){
+		if (data_idx >= log->compressed_limit_offset.size){
+			return 0;
+		}
 
-    idx_t start = log->limit_offset[data_idx].start;
-    idx_t count = log->limit_offset[data_idx].end;
-    idx_t offset = log->limit_offset[data_idx].in_start;
+		start = log->compressed_limit_offset.artifacts->start[data_idx];
+		count = log->compressed_limit_offset.artifacts->end[data_idx];
+		offset = log->compressed_limit_offset.artifacts->in_start[data_idx];
+
+	} else {
+
+		if (data_idx >= log->limit_offset.size()){
+			return 0;
+		}
+
+		start = log->limit_offset[data_idx].start;
+		count = log->limit_offset[data_idx].end;
+		offset = log->limit_offset[data_idx].in_start;
+	}
     chunk.SetCardinality(count);
     chunk.data[0].Sequence(start+offset, 1, count); // in_index
     chunk.data[1].Sequence(global_count, 1, count); // out_index
@@ -439,29 +693,72 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
     break;
   }
 	case PhysicalOperatorType::NESTED_LOOP_JOIN: {
-    if (data_idx >= log->nlj_log.size()) return 0;
-    int lsn = log->execute_internal[data_idx].first-1;
-    idx_t count = log->nlj_log[lsn].count;
+	idx_t count;
+	int lsn;
+
+    if(lineage_manager->compress){
+		if (data_idx >= log->compressed_nlj_log.size){
+			return 0;
+		}
+		lsn = log->execute_internal[data_idx].first-1;
+		count = log->compressed_nlj_log.artifacts->count[lsn];
+	} else {
+		if (data_idx >= log->nlj_log.size()){
+			return 0;
+		}
+		lsn = log->execute_internal[data_idx].first-1;
+		count = log->nlj_log[lsn].count;
+	}
+
     chunk.SetCardinality(count);
+
     Vector lhs_payload(LogicalType::INTEGER, count);
     Vector rhs_payload(LogicalType::INTEGER, count);
-    if (log->nlj_log[lsn].left) {
-      data_ptr_t left_ptr = (data_ptr_t)log->nlj_log[lsn].left->owned_data.get();
-      Vector temp(LogicalType::INTEGER, left_ptr);
-      lhs_payload.Reference(temp);
-    } else {
-      lhs_payload.SetVectorType(VectorType::CONSTANT_VECTOR);
-      ConstantVector::SetNull(lhs_payload, true);
-    }
-    
-    if (log->nlj_log[lsn].right) {
-      data_ptr_t right_ptr = (data_ptr_t)log->nlj_log[lsn].right->owned_data.get();
-      Vector temp(LogicalType::INTEGER, right_ptr);
-      rhs_payload.Reference(temp);
-    } else {
-      rhs_payload.SetVectorType(VectorType::CONSTANT_VECTOR);
-      ConstantVector::SetNull(rhs_payload, true);
-    }
+
+	if(lineage_manager->compress){
+		idx_t left_addr_num = log->compressed_nlj_log.artifacts->left[lsn];
+		if (left_addr_num) {
+			data_ptr_t left_ptr = reinterpret_cast<data_ptr_t>(left_addr_num);
+			Vector temp(LogicalType::INTEGER, left_ptr);
+			lhs_payload.Reference(temp);
+		} else {
+			lhs_payload.SetVectorType(VectorType::CONSTANT_VECTOR);
+			ConstantVector::SetNull(lhs_payload, true);
+		}
+
+		idx_t right_addr_num = log->compressed_nlj_log.artifacts->right[lsn];
+		if (right_addr_num) {
+			data_ptr_t right_ptr = reinterpret_cast<data_ptr_t>(right_addr_num);
+			Vector temp(LogicalType::INTEGER, right_ptr);
+			rhs_payload.Reference(temp);
+		} else {
+			rhs_payload.SetVectorType(VectorType::CONSTANT_VECTOR);
+			ConstantVector::SetNull(rhs_payload, true);
+		}
+
+	} else {
+		if (log->nlj_log[lsn].left) {
+			data_ptr_t left_ptr = (data_ptr_t)log->nlj_log[lsn].left->owned_data.get();
+			Vector temp(LogicalType::INTEGER, left_ptr);
+			lhs_payload.Reference(temp);
+		} else {
+			lhs_payload.SetVectorType(VectorType::CONSTANT_VECTOR);
+			ConstantVector::SetNull(lhs_payload, true);
+		}
+
+		if (log->nlj_log[lsn].right) {
+			data_ptr_t right_ptr = (data_ptr_t)log->nlj_log[lsn].right->owned_data.get();
+			Vector temp(LogicalType::INTEGER, right_ptr);
+			rhs_payload.Reference(temp);
+		} else {
+			rhs_payload.SetVectorType(VectorType::CONSTANT_VECTOR);
+			ConstantVector::SetNull(rhs_payload, true);
+		}
+	}
+
+
+
+
     chunk.data[0].Reference(lhs_payload);
     chunk.data[1].Reference(rhs_payload);
     chunk.data[2].Sequence(global_count, 1, count); // out_index
@@ -470,14 +767,37 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
     break;
   }
   case PhysicalOperatorType::CROSS_PRODUCT: {
-    if (data_idx >= log->cross_log.size()) return 0;
-    int lsn = log->execute_internal[data_idx].first-1;
+	  idx_t branch_scan_lhs;
+	  idx_t count;
+	  idx_t offset;
+	  idx_t position_in_chunk;
+	  idx_t scan_position;
 
-    idx_t branch_scan_lhs = log->cross_log[lsn].branch_scan_lhs;
-    idx_t count = log->cross_log[lsn].count;
-    idx_t offset = log->cross_log[lsn].in_start;
-    idx_t position_in_chunk = log->cross_log[lsn].position_in_chunk;
-    idx_t scan_position = log->cross_log[lsn].scan_position;
+	if(lineage_manager->compress){
+		if (data_idx >= log->compressed_cross_log.size){
+			return 0;
+		}
+		int lsn = log->execute_internal[data_idx].first-1;
+
+		branch_scan_lhs = log->compressed_cross_log.artifacts->branch_scan_lhs[lsn];
+		count = log->compressed_cross_log.artifacts->count[lsn];
+		offset = log->compressed_cross_log.artifacts->in_start[lsn];
+		position_in_chunk = log->compressed_cross_log.artifacts->position_in_chunk[lsn];
+		scan_position = log->compressed_cross_log.artifacts->scan_position[lsn];
+
+	} else {
+		if (data_idx >= log->cross_log.size()){
+			return 0;
+		}
+		int lsn = log->execute_internal[data_idx].first-1;
+
+		branch_scan_lhs = log->cross_log[lsn].branch_scan_lhs;
+		count = log->cross_log[lsn].count;
+		offset = log->cross_log[lsn].in_start;
+		position_in_chunk = log->cross_log[lsn].position_in_chunk;
+		scan_position = log->cross_log[lsn].scan_position;
+	}
+
     chunk.SetCardinality(count);
     
     if (branch_scan_lhs == false) {
@@ -500,21 +820,34 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
   }
 	case PhysicalOperatorType::HASH_GROUP_BY:
 	case PhysicalOperatorType::PERFECT_HASH_GROUP_BY: {
-    if (data_idx >= log->scatter_log.size()) return 0;
-    idx_t count = log->scatter_log[data_idx].count;
-    chunk.SetCardinality(count);
+		idx_t count;
+		data_ptr_t* payload;
 
-    auto payload = log->scatter_log[data_idx].addresses.get();
-    chunk.data[1].Initialize(false, count);
-    int* out_index_ptr = (int*)chunk.data[1].GetData();
-    for (idx_t j=0; j < count; ++j) {
-        out_index_ptr[j] = (int)log_index->codes[ payload[j] ];
-    }
-    chunk.data[0].Sequence(global_count, 1, count); // in_index
-    chunk.data[2].Reference(thread_id_vec);
-    chunk.data[3].Reference(thread_id_vec);
-		break;
-	}
+		if(lineage_manager->compress){
+			if (data_idx >= log->compressed_scatter_log.size){
+				return 0;
+			}
+			count = log->compressed_scatter_log.artifacts->count[data_idx];
+			payload = reinterpret_cast<data_ptr_t*>(log->compressed_scatter_log.artifacts->addresses[data_idx]);
+		} else {
+			if (data_idx >= log->scatter_log.size()){
+				return 0;
+			}
+			count = log->scatter_log[data_idx].count;
+			payload = log->scatter_log[data_idx].addresses.get();
+		}
+
+		chunk.SetCardinality(count);
+		chunk.data[1].Initialize(false, count);
+		int* out_index_ptr = (int*)chunk.data[1].GetData();
+		for (idx_t j=0; j < count; ++j) {
+			out_index_ptr[j] = (int)log_index->codes[ payload[j] ];
+		}
+		chunk.data[0].Sequence(global_count, 1, count); // in_index
+		chunk.data[2].Reference(thread_id_vec);
+		chunk.data[3].Reference(thread_id_vec);
+			break;
+		}
 	case PhysicalOperatorType::ORDER_BY: {
     if (log_index->offset >= log_index->vals.size()) return 0;
     idx_t count = log_index->vals.size() - log_index->offset;

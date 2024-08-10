@@ -141,9 +141,15 @@ void PerfectAggregateHashTable::AddChunk(DataChunk &groups, DataChunk &payload) 
 #ifdef LINEAGE
 	if (lineage_manager->capture && active_log) {
 		auto ptrs = FlatVector::GetData<data_ptr_t>(addresses);
-		unique_ptr<data_ptr_t[]> addresses_copy(new data_ptr_t[groups.size()]);
-		std::copy(ptrs, ptrs + groups.size() , addresses_copy.get());
-		active_log->scatter_log.push_back({move(addresses_copy), groups.size()});
+		if (lineage_manager->compress){
+			data_ptr_t* addresses_copy = new data_ptr_t[groups.size()];
+			std::copy(ptrs, ptrs + groups.size() , addresses_copy);
+			active_log->compressed_scatter_log.PushBack(reinterpret_cast<idx_t>(addresses_copy), groups.size());
+		} else {
+			unique_ptr<data_ptr_t[]> addresses_copy(new data_ptr_t[groups.size()]);
+			std::copy(ptrs, ptrs + groups.size() , addresses_copy.get());
+			active_log->scatter_log.push_back({move(addresses_copy), groups.size()});
+		}
 	}
 #endif
 

@@ -518,7 +518,11 @@ SinkFinalizeType PhysicalHashJoin::Finalize(Pipeline &pipeline, Event &event, Cl
 	}
 #ifdef LINEAGE
   if (lineage_manager->capture && active_log && !use_perfect_hash) {
-    active_log->perfect_full_scan_ht_log.clear();
+    if (lineage_manager->compress){
+		active_log->compressed_perfect_full_scan_ht_log.Clear();
+	} else {
+		active_log->perfect_full_scan_ht_log.clear();
+	}
   }
 	lineage_manager->Reset();
 #endif

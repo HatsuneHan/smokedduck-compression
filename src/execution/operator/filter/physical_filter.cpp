@@ -51,19 +51,32 @@ OperatorResultType PhysicalFilter::ExecuteInternal(ExecutionContext &context, Da
 	if (result_count == input.size()) {
 #ifdef LINEAGE
     if (lineage_manager->capture && active_log) {
+		if (lineage_manager->compress){
+			active_log->compressed_filter_log.PushBack(0, result_count, active_lop->children[0]->out_start);
+			active_log->SetLatestLSN({active_log->compressed_filter_log.size, 0});
+		} else {
 			active_log->filter_log.push_back({nullptr, result_count, active_lop->children[0]->out_start});
-      active_log->SetLatestLSN({active_log->filter_log.size(), 0});
+			active_log->SetLatestLSN({active_log->filter_log.size(), 0});
 		}
+
+	}
 #endif
 		// nothing was filtered: skip adding any selection vectors
 		chunk.Reference(input);
 	} else {
 #ifdef LINEAGE
-    if (lineage_manager->capture && active_log && result_count) {
-			unique_ptr<sel_t[]> sel_copy(new sel_t[result_count]);
-			std::copy(state.sel.data(), state.sel.data() + result_count, sel_copy.get());
-			active_log->filter_log.push_back({move(sel_copy), result_count, active_lop->children[0]->out_start});
-      active_log->SetLatestLSN({active_log->filter_log.size(), 0});
+		if (lineage_manager->capture && active_log && result_count) {
+			if (lineage_manager->compress){
+				sel_t* sel_copy = new sel_t[result_count];
+				std::copy(state.sel.data(), state.sel.data() + result_count, sel_copy);
+				active_log->compressed_filter_log.PushBack(reinterpret_cast<idx_t>(sel_copy), result_count, active_lop->children[0]->out_start);
+				active_log->SetLatestLSN({active_log->compressed_filter_log.size, 0});
+			} else {
+				unique_ptr<sel_t[]> sel_copy(new sel_t[result_count]);
+				std::copy(state.sel.data(), state.sel.data() + result_count, sel_copy.get());
+				active_log->filter_log.push_back({move(sel_copy), result_count, active_lop->children[0]->out_start});
+				active_log->SetLatestLSN({active_log->filter_log.size(), 0});
+			}
 		}
 #endif
 		chunk.Slice(input, state.sel, result_count);

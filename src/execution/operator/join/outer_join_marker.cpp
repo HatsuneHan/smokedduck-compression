@@ -65,8 +65,16 @@ void OuterJoinMarker::ConstructLeftJoinResult(DataChunk &left, DataChunk &result
 		}
 #ifdef LINEAGE
     if (lineage_manager->capture && active_log) {
-      active_log->nlj_log.push_back({remaining_sel.sel_data(), nullptr, remaining_count, 
-           0, active_lop->children[0]->out_start});
+      if(lineage_manager->compress){
+		  sel_t* remaining_sel_copy = new sel_t[remaining_count];
+		  std::copy(remaining_sel.sel_data()->owned_data.get(), remaining_sel.sel_data()->owned_data.get() + remaining_count, remaining_sel_copy);
+		  active_log->compressed_nlj_log.PushBack(reinterpret_cast<idx_t>(remaining_sel_copy),
+				                                  0, remaining_count, 0,
+				                                  active_lop->children[0]->out_start);
+	  } else {
+		  active_log->nlj_log.push_back({remaining_sel.sel_data(), nullptr, remaining_count,
+				                         0, active_lop->children[0]->out_start});
+	  }
       // TODO: add latest
     }
 #endif
