@@ -112,8 +112,20 @@ void DuckDBQueriesListFunction(ClientContext &context, TableFunctionInput &data_
 	// start returning values
 	// either fill up the chunk or return all the remaining columns
 	idx_t count = 0;
-  std::vector<idx_t> stats(3, 0);
+	idx_t total_bytes = 0;
+
+	std::vector<idx_t> stats(3, 0);
+
+	if(lineage_manager->compress) {
+		idx_t compressed_total_size = lineage_manager->GetCompressedArtifactSize();
+		stats[0] = compressed_total_size;
+	} else {
+		idx_t uncompressed_total_size = lineage_manager->GetUncompressedArtifactSize();
+		stats[0] = uncompressed_total_size;
+	}
+
 	while (data.offset < query_to_id.size() && count < STANDARD_VECTOR_SIZE) {
+//		std::cout << "Query ID: " << data.offset << " Query To ID Size: " << query_to_id.size() << std::endl;
 		string query = query_to_id[data.offset];
 		idx_t col = 0;
 		// query_id, INT
@@ -121,7 +133,7 @@ void DuckDBQueriesListFunction(ClientContext &context, TableFunctionInput &data_
 		// query, VARCHAR
 		output.SetValue(col++, count, query);
 
-    // size_byes_max
+    // size_bytes_max
 		output.SetValue(col++, count,Value::INTEGER(stats[0]));
 
     // size_bytes_min
@@ -131,7 +143,7 @@ void DuckDBQueriesListFunction(ClientContext &context, TableFunctionInput &data_
 		output.SetValue(col++, count,Value::INTEGER(stats[1]));
 
     // postprocess_time
-    float postprocess_time = 0.0;//((float) end - start) / CLOCKS_PER_SEC;
+    	float postprocess_time = 0.0;//((float) end - start) / CLOCKS_PER_SEC;
 		output.SetValue(col++, count,Value::FLOAT(postprocess_time));
 
     // plan, VARCHAR

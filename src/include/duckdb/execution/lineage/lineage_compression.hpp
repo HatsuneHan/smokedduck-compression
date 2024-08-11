@@ -103,7 +103,9 @@ public:
 		size++;
 	}
 	
-	idx_t GetBytesSize() {
+	size_t GetBytesSize() {
+		// size of the all the elements, not calculating the size of the extra buffers held by the elements
+
 		if(size == 0){
 			return sizeof(CompressedScanArtifactList);
 		} else {
@@ -523,6 +525,8 @@ struct CompressedPerfectFullScanHTArtifacts{
 	Compressed64List row_locations;
 	Compressed64List key_count;
 	Compressed64List ht_count;
+
+	Compressed64List vector_buffer_size;
 };
 
 class CompressedPerfectFullScanHTArtifactList{
@@ -558,7 +562,7 @@ public:
 		size = 0;
 	}
 
-	void PushBack(idx_t sel_build_p, idx_t sel_tuples_p, idx_t row_locations_p, idx_t key_count_p, idx_t ht_count_p){
+	void PushBack(idx_t sel_build_p, idx_t sel_tuples_p, idx_t row_locations_p, idx_t key_count_p, idx_t ht_count_p, idx_t vector_buffer_size_p){
 		if (size == 0) {
 			artifacts = new CompressedPerfectFullScanHTArtifacts();
 		}
@@ -568,11 +572,13 @@ public:
 		this->artifacts->row_locations.PushBack(row_locations_p, size);
 		this->artifacts->key_count.PushBack(key_count_p, size);
 		this->artifacts->ht_count.PushBack(ht_count_p, size);
+		this->artifacts->vector_buffer_size.PushBack(vector_buffer_size_p, size);
 
 		size++;
 	}
 
 	idx_t GetBytesSize() {
+		// do not consider vector buffer size, it is only used for statistics
 		if(size == 0){
 			return sizeof(CompressedPerfectFullScanHTArtifactList);
 		} else {
@@ -590,7 +596,6 @@ public:
 	CompressedPerfectFullScanHTArtifacts* artifacts;
 
 	size_t size;
-
 };
 
 struct CompressedLimitArtifacts{

@@ -64,6 +64,10 @@ public:
 		operators_ids.clear();
 	}
 
+	size_t GetUncompressedArtifactSize();
+
+	size_t GetCompressedArtifactSize();
+
 public:
   bool capture;
   bool persist;

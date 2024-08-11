@@ -123,5 +123,917 @@ void LineageManager::StoreQueryLineage(ClientContext &context, PhysicalOperator 
 	queryid_to_plan[query_id] = lineage_manager->global_logger[(void *)op];
   if (persist) CreateLineageTables(context, op, query_id);
 }
+
+size_t LineageManager::GetUncompressedArtifactSize() {
+	size_t total_size = 0;
+	size_t total_buffer_size = 0;
+
+	size_t filter_log_size = 0;
+	size_t filter_log_buffer_size = 0;
+
+	size_t limit_offset_size = 0;
+	size_t limit_offset_buffer_size = 0;
+
+	size_t perfect_full_scan_ht_log_size = 0;
+	size_t perfect_full_scan_ht_log_buffer_size = 0;
+
+	size_t perfect_probe_ht_log_size = 0;
+	size_t perfect_probe_ht_log_buffer_size = 0;
+
+	size_t row_group_log_size = 0;
+	size_t row_group_log_buffer_size = 0;
+
+	size_t scatter_log_size = 0;
+	size_t scatter_log_buffer_size = 0;
+
+	size_t scatter_sel_log_size = 0;
+	size_t scatter_sel_log_buffer_size = 0;
+
+	size_t gather_log_size = 0;
+	size_t gather_log_buffer_size = 0;
+
+	size_t combine_log_size = 0;
+	size_t combine_log_buffer_size = 0;
+
+	size_t finalize_states_log_size = 0;
+	size_t finalize_states_log_buffer_size = 0;
+
+	size_t join_gather_log_size = 0;
+	size_t join_gather_log_buffer_size = 0;
+
+	size_t reorder_log_size = 0;
+	size_t reorder_log_buffer_size = 0;
+
+	size_t cross_log_size = 0;
+	size_t cross_log_buffer_size = 0;
+
+	size_t nlj_log_size = 0;
+	size_t nlj_log_buffer_size = 0;
+
+	for (const auto& pair : lineage_manager->global_logger){
+		OperatorLineage* lop = pair.second.get();
+		for (const auto& pair_log : lop->log){
+			Log* curr_log = pair_log.second.get();
+
+			// filter log
+			{
+				size_t tmp_filter_log_size = 0;
+				size_t tmp_filter_log_buffer_size = 0;
+				size_t tmp_filter_log_element_size = 0;
+
+				tmp_filter_log_element_size += sizeof(std::vector<filter_artifact>); // vector size
+				tmp_filter_log_element_size += sizeof(filter_artifact) * curr_log->filter_log.capacity(); // size of elements in vector
+
+				for(size_t i = 0; i < curr_log->filter_log.size(); i++){
+					if(curr_log->filter_log[i].sel != nullptr){
+						tmp_filter_log_buffer_size += sizeof(sel_t) * curr_log->filter_log[i].count; // size of the buffer hold by each element
+					}
+				}
+
+				tmp_filter_log_size = tmp_filter_log_element_size + tmp_filter_log_buffer_size;
+
+				filter_log_size += tmp_filter_log_size;
+				filter_log_buffer_size += tmp_filter_log_buffer_size;
+
+				total_size += tmp_filter_log_size;
+				total_buffer_size += tmp_filter_log_buffer_size;
+			}
+
+			// limit offset log
+			{
+				size_t tmp_limit_offset_size = 0;
+				size_t tmp_limit_offset_buffer_size = 0;
+				size_t tmp_limit_offset_element_size = 0;
+
+				tmp_limit_offset_element_size += sizeof(std::vector<limit_artifact>);
+				tmp_limit_offset_element_size += sizeof(limit_artifact) * curr_log->limit_offset.capacity();
+
+				tmp_limit_offset_buffer_size = 0;
+
+				tmp_limit_offset_size = tmp_limit_offset_element_size + tmp_limit_offset_buffer_size;
+
+				limit_offset_size += tmp_limit_offset_size;
+				limit_offset_buffer_size += tmp_limit_offset_buffer_size;
+
+				total_size += tmp_limit_offset_size;
+			}
+
+			// perfect full scan ht log
+			{
+				size_t tmp_perfect_full_scan_ht_log_size = 0;
+				size_t tmp_perfect_full_scan_ht_log_buffer_size = 0;
+				size_t tmp_perfect_full_scan_ht_log_element_size = 0;
+
+				tmp_perfect_full_scan_ht_log_element_size += sizeof(std::vector<perfect_full_scan_ht_artifact>);
+				tmp_perfect_full_scan_ht_log_element_size += sizeof(perfect_full_scan_ht_artifact) * curr_log->perfect_full_scan_ht_log.capacity();
+
+				for(size_t i = 0; i < curr_log->perfect_full_scan_ht_log.size(); i++){
+					// for sel_build and sel_tuples, even though we use buffer_ptr/shared_ptr and do not use std::move
+					// we need to additionally calculate the size of the buffer (though the buffer is shared)
+					// because it should have been freed before PostProcess() / GetLineageAsChunk() is called
+					if(curr_log->perfect_full_scan_ht_log[i].sel_build != nullptr){
+						tmp_perfect_full_scan_ht_log_buffer_size += sizeof(SelectionData);
+						if(curr_log->perfect_full_scan_ht_log[i].sel_build->owned_data != nullptr){
+							tmp_perfect_full_scan_ht_log_buffer_size += sizeof(sel_t) * curr_log->perfect_full_scan_ht_log[i].key_count; // sel_build.owned_data
+						}
+					}
+
+					if(curr_log->perfect_full_scan_ht_log[i].sel_tuples != nullptr){
+						tmp_perfect_full_scan_ht_log_buffer_size += sizeof(SelectionData);
+						if(curr_log->perfect_full_scan_ht_log[i].sel_tuples->owned_data != nullptr){
+							tmp_perfect_full_scan_ht_log_buffer_size += sizeof(sel_t) * curr_log->perfect_full_scan_ht_log[i].key_count; // sel_tuples.owned_data
+						}
+					}
+
+					if(curr_log->perfect_full_scan_ht_log[i].row_locations != nullptr){
+						tmp_perfect_full_scan_ht_log_buffer_size += sizeof(VectorBuffer);
+						if(curr_log->perfect_full_scan_ht_log[i].row_locations->GetData() != nullptr){
+							tmp_perfect_full_scan_ht_log_buffer_size += sizeof(data_t) * curr_log->perfect_full_scan_ht_log[i].row_locations->GetDataSize(); // row_locations.data
+						}
+						// it's pretty tricky to calculate the size of row_locations.aux_data, so we just ignore it
+					}
+
+				}
+				tmp_perfect_full_scan_ht_log_size = tmp_perfect_full_scan_ht_log_element_size + tmp_perfect_full_scan_ht_log_buffer_size;
+
+				perfect_full_scan_ht_log_size += tmp_perfect_full_scan_ht_log_size;
+				perfect_full_scan_ht_log_buffer_size += tmp_perfect_full_scan_ht_log_buffer_size;
+
+				total_size += tmp_perfect_full_scan_ht_log_size;
+				total_buffer_size += tmp_perfect_full_scan_ht_log_buffer_size;
+			}
+
+			// perfect probe ht log
+			{
+				size_t tmp_perfect_probe_ht_log_size = 0;
+				size_t tmp_perfect_probe_ht_log_buffer_size = 0;
+				size_t tmp_perfect_probe_ht_log_element_size = 0;
+
+				tmp_perfect_probe_ht_log_element_size += sizeof(std::vector<perfect_join_artifact>);
+				tmp_perfect_probe_ht_log_element_size += sizeof(perfect_join_artifact) * curr_log->perfect_probe_ht_log.capacity();
+
+				for(size_t i = 0; i < curr_log->perfect_probe_ht_log.size(); i++){
+					if(curr_log->perfect_probe_ht_log[i].left != nullptr){
+						tmp_perfect_probe_ht_log_buffer_size += sizeof(sel_t) * curr_log->perfect_probe_ht_log[i].count; // left
+					}
+					if(curr_log->perfect_probe_ht_log[i].right != nullptr){
+						tmp_perfect_probe_ht_log_buffer_size += sizeof(sel_t) * curr_log->perfect_probe_ht_log[i].count; // right
+					}
+				}
+
+				tmp_perfect_probe_ht_log_size = tmp_perfect_probe_ht_log_element_size + tmp_perfect_probe_ht_log_buffer_size;
+
+				perfect_probe_ht_log_size += tmp_perfect_probe_ht_log_size;
+				perfect_probe_ht_log_buffer_size += tmp_perfect_probe_ht_log_buffer_size;
+
+				total_size += tmp_perfect_probe_ht_log_size;
+				total_buffer_size += tmp_perfect_probe_ht_log_buffer_size;
+			}
+
+			// row group log
+			{
+				size_t tmp_row_group_log_size = 0;
+				size_t tmp_row_group_log_buffer_size = 0;
+				size_t tmp_row_group_log_element_size = 0;
+
+				tmp_row_group_log_element_size += sizeof(std::vector<scan_artifact>);
+				tmp_row_group_log_element_size += sizeof(scan_artifact) * curr_log->row_group_log.capacity();
+
+				for(size_t i = 0; i < curr_log->row_group_log.size(); i++){
+					if( curr_log->row_group_log[i].sel != nullptr) {
+						tmp_row_group_log_buffer_size += sizeof(sel_t) * curr_log->row_group_log[i].count; // sel
+					}
+				}
+
+				tmp_row_group_log_size = tmp_row_group_log_element_size + tmp_row_group_log_buffer_size;
+
+				row_group_log_size += tmp_row_group_log_size;
+				row_group_log_buffer_size += tmp_row_group_log_buffer_size;
+
+				total_size += tmp_row_group_log_size;
+				total_buffer_size += tmp_row_group_log_buffer_size;
+			}
+
+			// scatter log
+			{
+				size_t tmp_scatter_log_size = 0;
+				size_t tmp_scatter_log_buffer_size = 0;
+				size_t tmp_scatter_log_element_size = 0;
+
+				tmp_scatter_log_element_size += sizeof(std::vector<address_artifact>);
+				tmp_scatter_log_element_size += sizeof(address_artifact) * curr_log->scatter_log.capacity();
+
+				for(size_t i = 0; i < curr_log->scatter_log.size(); i++){
+					if(curr_log->scatter_log[i].addresses != nullptr){
+						tmp_scatter_log_buffer_size += sizeof(data_ptr_t) * curr_log->scatter_log[i].count; // addresses
+					}
+				}
+
+				tmp_scatter_log_size = tmp_scatter_log_element_size + tmp_scatter_log_buffer_size;
+
+				scatter_log_size += tmp_scatter_log_size;
+				scatter_log_buffer_size += tmp_scatter_log_buffer_size;
+
+				total_size += tmp_scatter_log_size;
+				total_buffer_size += tmp_scatter_log_buffer_size;
+			}
+
+			// scatter sel log
+			{
+				size_t tmp_scatter_sel_log_size = 0;
+				size_t tmp_scatter_sel_log_buffer_size = 0;
+				size_t tmp_scatter_sel_log_element_size = 0;
+
+				tmp_scatter_sel_log_element_size += sizeof(std::vector<address_sel_artifact>);
+				tmp_scatter_sel_log_element_size += sizeof(address_sel_artifact) * curr_log->scatter_sel_log.capacity();
+
+				for(size_t i = 0; i < curr_log->scatter_sel_log.size(); i++){
+					if(curr_log->scatter_sel_log[i].addresses != nullptr){
+						tmp_scatter_sel_log_buffer_size += sizeof(data_ptr_t) * curr_log->scatter_sel_log[i].count; // addresses
+					}
+					if(curr_log->scatter_sel_log[i].sel != nullptr){
+						tmp_scatter_sel_log_buffer_size += sizeof(sel_t) * curr_log->scatter_sel_log[i].count; // sel
+					}
+				}
+
+				tmp_scatter_sel_log_size = tmp_scatter_sel_log_element_size + tmp_scatter_sel_log_buffer_size;
+
+				scatter_sel_log_size += tmp_scatter_sel_log_size;
+				scatter_sel_log_buffer_size += tmp_scatter_sel_log_buffer_size;
+
+				total_size += tmp_scatter_sel_log_size;
+				total_buffer_size += tmp_scatter_sel_log_buffer_size;
+			}
+
+			// gather log
+			{
+				size_t tmp_gather_log_size = 0;
+				size_t tmp_gather_log_buffer_size = 0;
+				size_t tmp_gather_log_element_size = 0;
+
+				tmp_gather_log_element_size += sizeof(std::vector<address_artifact>);
+				tmp_gather_log_element_size += sizeof(address_artifact) * curr_log->gather_log.capacity();
+
+				for(size_t i = 0; i < curr_log->gather_log.size(); i++){
+					if(curr_log->gather_log[i].addresses != nullptr){
+						tmp_gather_log_buffer_size += sizeof(data_ptr_t) * curr_log->gather_log[i].count; // addresses
+					}
+				}
+
+				tmp_gather_log_size = tmp_gather_log_element_size + tmp_gather_log_buffer_size;
+
+				gather_log_size += tmp_gather_log_size;
+				gather_log_buffer_size += tmp_gather_log_buffer_size;
+
+				total_size += tmp_gather_log_size;
+				total_buffer_size += tmp_gather_log_buffer_size;
+			}
+
+			// combine log
+			{
+				size_t tmp_combine_log_size = 0;
+				size_t tmp_combine_log_buffer_size = 0;
+				size_t tmp_combine_log_element_size = 0;
+
+				tmp_combine_log_element_size += sizeof(std::vector<combine_artifact>);
+				tmp_combine_log_element_size += sizeof(combine_artifact) * curr_log->combine_log.capacity();
+
+				for(size_t i = 0; i < curr_log->combine_log.size(); i++){
+					if(curr_log->combine_log[i].src != nullptr){
+						tmp_combine_log_buffer_size += sizeof(data_ptr_t) * curr_log->combine_log[i].count; // src
+					}
+					if(curr_log->combine_log[i].target != nullptr){
+						tmp_combine_log_buffer_size += sizeof(data_ptr_t) * curr_log->combine_log[i].count; // dst
+					}
+				}
+
+				tmp_combine_log_size = tmp_combine_log_element_size + tmp_combine_log_buffer_size;
+
+				combine_log_size += tmp_combine_log_size;
+				combine_log_buffer_size += tmp_combine_log_buffer_size;
+
+				total_size += tmp_combine_log_size;
+				total_buffer_size += tmp_combine_log_buffer_size;
+			}
+
+			// finalize states log
+			{
+				size_t tmp_finalize_states_log_size = 0;
+				size_t tmp_finalize_states_log_buffer_size = 0;
+				size_t tmp_finalize_states_log_element_size = 0;
+
+				tmp_finalize_states_log_element_size += sizeof(std::vector<address_artifact>);
+				tmp_finalize_states_log_element_size += sizeof(address_artifact) * curr_log->finalize_states_log.capacity();
+
+				for(size_t i = 0; i < curr_log->finalize_states_log.size(); i++){
+					if(curr_log->finalize_states_log[i].addresses != nullptr){
+						tmp_finalize_states_log_buffer_size += sizeof(data_ptr_t) * curr_log->finalize_states_log[i].count; // addresses
+					}
+				}
+
+				tmp_finalize_states_log_size = tmp_finalize_states_log_element_size + tmp_finalize_states_log_buffer_size;
+
+				finalize_states_log_size += tmp_finalize_states_log_size;
+				finalize_states_log_buffer_size += tmp_finalize_states_log_buffer_size;
+
+				total_size += tmp_finalize_states_log_size;
+				total_buffer_size += tmp_finalize_states_log_buffer_size;
+			}
+
+			// join gather log
+			{
+				size_t tmp_join_gather_log_size = 0;
+				size_t tmp_join_gather_log_buffer_size = 0;
+				size_t tmp_join_gather_log_element_size = 0;
+
+				tmp_join_gather_log_element_size += sizeof(std::vector<join_gather_artifact>);
+				tmp_join_gather_log_element_size += sizeof(join_gather_artifact) * curr_log->join_gather_log.capacity();
+
+				for(size_t i = 0; i < curr_log->join_gather_log.size(); i++){
+					if(curr_log->join_gather_log[i].rhs != nullptr){
+						tmp_join_gather_log_buffer_size += sizeof(data_ptr_t) * curr_log->join_gather_log[i].count; // rhs
+					}
+					if(curr_log->join_gather_log[i].lhs != nullptr){
+						tmp_join_gather_log_buffer_size += sizeof(sel_t) * curr_log->join_gather_log[i].count; // lhs
+					}
+				}
+
+				tmp_join_gather_log_size = tmp_join_gather_log_element_size + tmp_join_gather_log_buffer_size;
+
+				join_gather_log_size += tmp_join_gather_log_size;
+				join_gather_log_buffer_size += tmp_join_gather_log_buffer_size;
+
+				total_size += tmp_join_gather_log_size;
+				total_buffer_size += tmp_join_gather_log_buffer_size;
+			}
+
+			// reorder log
+			{
+				size_t tmp_reorder_log_size = 0;
+				size_t tmp_reorder_log_buffer_size = 0;
+				size_t tmp_reorder_log_element_size = 0;
+
+				tmp_reorder_log_element_size += sizeof(std::vector<std::vector<idx_t>>);
+				tmp_reorder_log_element_size += sizeof(std::vector<idx_t>) * curr_log->reorder_log.capacity();
+
+				for(size_t i = 0; i < curr_log->reorder_log.size(); i++){
+					tmp_reorder_log_element_size += sizeof(idx_t) * curr_log->reorder_log[i].capacity();
+				}
+
+				tmp_reorder_log_buffer_size = 0;
+
+				tmp_reorder_log_size = tmp_reorder_log_element_size + tmp_reorder_log_buffer_size;
+
+				reorder_log_size += tmp_reorder_log_size;
+				reorder_log_buffer_size += tmp_reorder_log_buffer_size;
+
+				total_size += tmp_reorder_log_size;
+				total_buffer_size += tmp_reorder_log_buffer_size;
+			}
+
+			// cross log
+			{
+				size_t tmp_cross_log_size = 0;
+				size_t tmp_cross_log_buffer_size = 0;
+				size_t tmp_cross_log_element_size = 0;
+
+				tmp_cross_log_element_size += sizeof(std::vector<cross_artifact>);
+				tmp_cross_log_element_size += sizeof(cross_artifact) * curr_log->cross_log.capacity();
+
+				tmp_cross_log_buffer_size = 0;
+
+				tmp_cross_log_size = tmp_cross_log_element_size + tmp_cross_log_buffer_size;
+
+				cross_log_size += tmp_cross_log_size;
+				cross_log_buffer_size += tmp_cross_log_buffer_size;
+
+				total_size += tmp_cross_log_size;
+				total_buffer_size += tmp_cross_log_buffer_size;
+			}
+
+			// nlj log
+			{
+				size_t tmp_nlj_log_size = 0;
+				size_t tmp_nlj_log_buffer_size = 0;
+				size_t tmp_nlj_log_element_size = 0;
+
+				tmp_nlj_log_element_size += sizeof(std::vector<nlj_artifact>);
+				tmp_nlj_log_element_size += sizeof(nlj_artifact) * curr_log->nlj_log.capacity();
+
+				for(size_t i = 0; i < curr_log->nlj_log.size(); i++){
+					if(curr_log->nlj_log[i].left != nullptr){
+						tmp_nlj_log_buffer_size += sizeof(SelectionData);
+						if(curr_log->nlj_log[i].left->owned_data != nullptr){
+							tmp_nlj_log_buffer_size += sizeof(sel_t) * curr_log->nlj_log[i].count; // left.owned_data
+						}
+					}
+					if(curr_log->nlj_log[i].right != nullptr){
+						tmp_nlj_log_buffer_size += sizeof(SelectionData);
+						if(curr_log->nlj_log[i].right->owned_data != nullptr){
+							tmp_nlj_log_buffer_size += sizeof(sel_t) * curr_log->nlj_log[i].count; // right.owned_data
+						}
+					}
+				}
+
+				tmp_nlj_log_size = tmp_nlj_log_element_size + tmp_nlj_log_buffer_size;
+
+				nlj_log_size += tmp_nlj_log_size;
+				nlj_log_buffer_size += tmp_nlj_log_buffer_size;
+
+				total_size += tmp_nlj_log_size;
+				total_buffer_size += tmp_nlj_log_buffer_size;
+			}
+
+
+		}
+	}
+
+	std::cout << "\nuncompressed filter_log_size: " << filter_log_size << std::endl;
+	std::cout << "uncompressed filter_log_buffer_size: " << filter_log_buffer_size << std::endl;
+
+	std::cout << "uncompressed limit_offset_size: " << limit_offset_size << std::endl;
+	std::cout << "uncompressed limit_offset_buffer_size: " << limit_offset_buffer_size << std::endl;
+
+	std::cout << "uncompressed perfect_full_scan_ht_log_size: " << perfect_full_scan_ht_log_size << std::endl;
+	std::cout << "uncompressed perfect_full_scan_ht_log_buffer_size: " << perfect_full_scan_ht_log_buffer_size << std::endl;
+
+	std::cout << "uncompressed perfect_probe_ht_log_size: " << perfect_probe_ht_log_size << std::endl;
+	std::cout << "uncompressed perfect_probe_ht_log_buffer_size: " << perfect_probe_ht_log_buffer_size << std::endl;
+
+	std::cout << "uncompressed row_group_log_size: " << row_group_log_size << std::endl;
+	std::cout << "uncompressed row_group_log_buffer_size: " << row_group_log_buffer_size << std::endl;
+
+	std::cout << "uncompressed scatter_log_size: " << scatter_log_size << std::endl;
+	std::cout << "uncompressed scatter_log_buffer_size: " << scatter_log_buffer_size << std::endl;
+
+	std::cout << "uncompressed scatter_sel_log_size: " << scatter_sel_log_size << std::endl;
+	std::cout << "uncompressed scatter_sel_log_buffer_size: " << scatter_sel_log_buffer_size << std::endl;
+
+	std::cout << "uncompressed gather_log_size: " << gather_log_size << std::endl;
+	std::cout << "uncompressed gather_log_buffer_size: " << gather_log_buffer_size << std::endl;
+
+	std::cout << "uncompressed combine_log_size: " << combine_log_size << std::endl;
+	std::cout << "uncompressed combine_log_buffer_size: " << combine_log_buffer_size << std::endl;
+
+	std::cout << "uncompressed finalize_states_log_size: " << finalize_states_log_size << std::endl;
+	std::cout << "uncompressed finalize_states_log_buffer_size: " << finalize_states_log_buffer_size << std::endl;
+
+	std::cout << "uncompressed join_gather_log_size: " << join_gather_log_size << std::endl;
+	std::cout << "uncompressed join_gather_log_buffer_size: " << join_gather_log_buffer_size << std::endl;
+
+	std::cout << "uncompressed reorder_log_size: " << reorder_log_size << std::endl;
+	std::cout << "uncompressed reorder_log_buffer_size: " << reorder_log_buffer_size << std::endl;
+
+	std::cout << "uncompressed cross_log_size: " << cross_log_size << std::endl;
+	std::cout << "uncompressed cross_log_buffer_size: " << cross_log_buffer_size << std::endl;
+
+	std::cout << "uncompressed nlj_log_size: " << nlj_log_size << std::endl;
+	std::cout << "uncompressed nlj_log_buffer_size: " << nlj_log_buffer_size << std::endl;
+
+	std::cout << "uncompressed total_size: " << total_size << std::endl;
+	std::cout << "uncompressed total_buffer_size: " << total_buffer_size << std::endl;
+	std::cout << "uncompressed total_element_size: " << total_size - total_buffer_size << std::endl;
+
+	return total_size;
+
+}
+
+size_t LineageManager::GetCompressedArtifactSize() {
+	size_t total_size = 0;
+	size_t total_buffer_size = 0;
+
+	size_t filter_log_size = 0;
+	size_t filter_log_buffer_size = 0;
+
+	size_t limit_offset_size = 0;
+	size_t limit_offset_buffer_size = 0;
+
+	size_t perfect_full_scan_ht_log_size = 0;
+	size_t perfect_full_scan_ht_log_buffer_size = 0;
+
+	size_t perfect_probe_ht_log_size = 0;
+	size_t perfect_probe_ht_log_buffer_size = 0;
+
+	size_t row_group_log_size = 0;
+	size_t row_group_log_buffer_size = 0;
+
+	size_t scatter_log_size = 0;
+	size_t scatter_log_buffer_size = 0;
+
+	size_t scatter_sel_log_size = 0;
+	size_t scatter_sel_log_buffer_size = 0;
+
+	size_t gather_log_size = 0;
+	size_t gather_log_buffer_size = 0;
+
+	size_t combine_log_size = 0;
+	size_t combine_log_buffer_size = 0;
+
+	size_t finalize_states_log_size = 0;
+	size_t finalize_states_log_buffer_size = 0;
+
+	size_t join_gather_log_size = 0;
+	size_t join_gather_log_buffer_size = 0;
+
+	size_t reorder_log_size = 0;
+	size_t reorder_log_buffer_size = 0;
+
+	size_t cross_log_size = 0;
+	size_t cross_log_buffer_size = 0;
+
+	size_t nlj_log_size = 0;
+	size_t nlj_log_buffer_size = 0;
+
+	for (const auto& pair : lineage_manager->global_logger){
+		OperatorLineage* lop = pair.second.get();
+		for (const auto& pair_log : lop->log){
+			Log* curr_log = pair_log.second.get();
+
+			// compressed filter log
+			{
+				size_t tmp_filter_log_size = 0;
+				size_t tmp_filter_log_buffer_size = 0;
+				size_t tmp_filter_log_element_size = 0;
+
+				tmp_filter_log_element_size += curr_log->compressed_filter_log.GetBytesSize();
+
+				for(size_t i = 0; i < curr_log->compressed_filter_log.size; i++){
+					if(curr_log->compressed_filter_log.artifacts->sel[i] != 0){
+						tmp_filter_log_buffer_size += sizeof(sel_t) * curr_log->compressed_filter_log.artifacts->count[i]; // sel
+					}
+				}
+
+				tmp_filter_log_size = tmp_filter_log_element_size + tmp_filter_log_buffer_size;
+
+				filter_log_size += tmp_filter_log_size;
+				filter_log_buffer_size += tmp_filter_log_buffer_size;
+
+				total_size += tmp_filter_log_size;
+				total_buffer_size += tmp_filter_log_buffer_size;
+			}
+
+			// limit offset log
+			{
+				size_t tmp_limit_offset_size = 0;
+				size_t tmp_limit_offset_buffer_size = 0;
+				size_t tmp_limit_offset_element_size = 0;
+
+				tmp_limit_offset_element_size += curr_log->compressed_limit_offset.GetBytesSize();
+				tmp_limit_offset_buffer_size = 0;
+
+				tmp_limit_offset_size = tmp_limit_offset_element_size + tmp_limit_offset_buffer_size;
+
+				limit_offset_size += tmp_limit_offset_size;
+				limit_offset_buffer_size += tmp_limit_offset_buffer_size;
+
+				total_size += tmp_limit_offset_size;
+				total_buffer_size += tmp_limit_offset_buffer_size;
+			}
+
+			// perfect full scan ht log
+			{
+				size_t tmp_perfect_full_scan_ht_log_size = 0;
+				size_t tmp_perfect_full_scan_ht_log_buffer_size = 0;
+				size_t tmp_perfect_full_scan_ht_log_element_size = 0;
+
+				tmp_perfect_full_scan_ht_log_element_size += curr_log->compressed_perfect_full_scan_ht_log.GetBytesSize();
+
+				for(size_t i = 0; i < curr_log->compressed_perfect_full_scan_ht_log.size; i++){
+					if(curr_log->compressed_perfect_full_scan_ht_log.artifacts->sel_build[i] != 0){
+						tmp_perfect_full_scan_ht_log_buffer_size += sizeof(sel_t) * curr_log->compressed_perfect_full_scan_ht_log.artifacts->key_count[i]; // sel_build
+					}
+					if(curr_log->compressed_perfect_full_scan_ht_log.artifacts->sel_tuples[i] != 0){
+						tmp_perfect_full_scan_ht_log_buffer_size += sizeof(sel_t) * curr_log->compressed_perfect_full_scan_ht_log.artifacts->key_count[i]; // sel_tuples
+					}
+					if(curr_log->compressed_perfect_full_scan_ht_log.artifacts->row_locations[i] != 0){
+						tmp_perfect_full_scan_ht_log_buffer_size += sizeof(data_t) * curr_log->compressed_perfect_full_scan_ht_log.artifacts->vector_buffer_size[i]; // row_locations
+					}
+				}
+
+				tmp_perfect_full_scan_ht_log_size = tmp_perfect_full_scan_ht_log_element_size + tmp_perfect_full_scan_ht_log_buffer_size;
+
+				perfect_full_scan_ht_log_size += tmp_perfect_full_scan_ht_log_size;
+				perfect_full_scan_ht_log_buffer_size += tmp_perfect_full_scan_ht_log_buffer_size;
+
+				total_size += tmp_perfect_full_scan_ht_log_size;
+				total_buffer_size += tmp_perfect_full_scan_ht_log_buffer_size;
+			}
+
+			// perfect probe ht log
+			{
+				size_t tmp_perfect_probe_ht_log_size = 0;
+				size_t tmp_perfect_probe_ht_log_buffer_size = 0;
+				size_t tmp_perfect_probe_ht_log_element_size = 0;
+
+				tmp_perfect_probe_ht_log_element_size += curr_log->compressed_perfect_probe_ht_log.GetBytesSize();
+
+				for(size_t i = 0; i < curr_log->compressed_perfect_probe_ht_log.size; i++){
+					if(curr_log->compressed_perfect_probe_ht_log.artifacts->left[i] != 0){
+						tmp_perfect_probe_ht_log_buffer_size += sizeof(sel_t) * curr_log->compressed_perfect_probe_ht_log.artifacts->count[i]; // left
+					}
+					if(curr_log->compressed_perfect_probe_ht_log.artifacts->right[i] != 0){
+						tmp_perfect_probe_ht_log_buffer_size += sizeof(sel_t) * curr_log->compressed_perfect_probe_ht_log.artifacts->count[i]; // right
+					}
+				}
+
+				tmp_perfect_probe_ht_log_size = tmp_perfect_probe_ht_log_element_size + tmp_perfect_probe_ht_log_buffer_size;
+
+				perfect_probe_ht_log_size += tmp_perfect_probe_ht_log_size;
+				perfect_probe_ht_log_buffer_size += tmp_perfect_probe_ht_log_buffer_size;
+
+				total_size += tmp_perfect_probe_ht_log_size;
+				total_buffer_size += tmp_perfect_probe_ht_log_buffer_size;
+			}
+
+			// row group log
+			{
+				size_t tmp_row_group_log_size = 0;
+				size_t tmp_row_group_log_buffer_size = 0;
+				size_t tmp_row_group_log_element_size = 0;
+
+				tmp_row_group_log_element_size += curr_log->compressed_row_group_log.GetBytesSize();
+
+				for(size_t i = 0; i < curr_log->compressed_row_group_log.size; i++){
+					if(curr_log->compressed_row_group_log.artifacts->sel[i] != 0){
+						tmp_row_group_log_buffer_size += sizeof(sel_t) * curr_log->compressed_row_group_log.artifacts->count[i]; // sel
+					}
+				}
+
+				tmp_row_group_log_size = tmp_row_group_log_element_size + tmp_row_group_log_buffer_size;
+
+				row_group_log_size += tmp_row_group_log_size;
+				row_group_log_buffer_size += tmp_row_group_log_buffer_size;
+
+				total_size += tmp_row_group_log_size;
+				total_buffer_size += tmp_row_group_log_buffer_size;
+			}
+
+			// scatter log
+			{
+				size_t tmp_scatter_log_size = 0;
+				size_t tmp_scatter_log_buffer_size = 0;
+				size_t tmp_scatter_log_element_size = 0;
+
+				tmp_scatter_log_element_size += curr_log->compressed_scatter_log.GetBytesSize();
+
+				for(size_t i = 0; i < curr_log->compressed_scatter_log.size; i++){
+					if(curr_log->compressed_scatter_log.artifacts->addresses[i] != 0){
+						tmp_scatter_log_buffer_size += sizeof(data_ptr_t) * curr_log->compressed_scatter_log.artifacts->count[i]; // addresses
+					}
+				}
+
+				tmp_scatter_log_size = tmp_scatter_log_element_size + tmp_scatter_log_buffer_size;
+
+				scatter_log_size += tmp_scatter_log_size;
+				scatter_log_buffer_size += tmp_scatter_log_buffer_size;
+
+				total_size += tmp_scatter_log_size;
+				total_buffer_size += tmp_scatter_log_buffer_size;
+			}
+
+			// scatter sel log
+			{
+				size_t tmp_scatter_sel_log_size = 0;
+				size_t tmp_scatter_sel_log_buffer_size = 0;
+				size_t tmp_scatter_sel_log_element_size = 0;
+
+				tmp_scatter_sel_log_element_size += curr_log->compressed_scatter_sel_log.GetBytesSize();
+
+				for(size_t i = 0; i < curr_log->compressed_scatter_sel_log.size; i++){
+					if(curr_log->compressed_scatter_sel_log.artifacts->addresses[i] != 0){
+						tmp_scatter_sel_log_buffer_size += sizeof(data_ptr_t) * curr_log->compressed_scatter_sel_log.artifacts->count[i]; // addresses
+					}
+					if(curr_log->compressed_scatter_sel_log.artifacts->sel[i] != 0){
+						tmp_scatter_sel_log_buffer_size += sizeof(sel_t) * curr_log->compressed_scatter_sel_log.artifacts->count[i]; // sel
+					}
+				}
+
+				tmp_scatter_sel_log_size = tmp_scatter_sel_log_element_size + tmp_scatter_sel_log_buffer_size;
+
+				scatter_sel_log_size += tmp_scatter_sel_log_size;
+				scatter_sel_log_buffer_size += tmp_scatter_sel_log_buffer_size;
+
+				total_size += tmp_scatter_sel_log_size;
+				total_buffer_size += tmp_scatter_sel_log_buffer_size;
+			}
+
+			// gather log
+			{
+				size_t tmp_gather_log_size = 0;
+				size_t tmp_gather_log_buffer_size = 0;
+				size_t tmp_gather_log_element_size = 0;
+
+				tmp_gather_log_element_size += curr_log->compressed_gather_log.GetBytesSize();
+
+				for(size_t i = 0; i < curr_log->compressed_gather_log.size; i++){
+					if(curr_log->compressed_gather_log.artifacts->addresses[i] != 0){
+						tmp_gather_log_buffer_size += sizeof(data_ptr_t) * curr_log->compressed_gather_log.artifacts->count[i]; // addresses
+					}
+				}
+
+				tmp_gather_log_size = tmp_gather_log_element_size + tmp_gather_log_buffer_size;
+
+				gather_log_size += tmp_gather_log_size;
+				gather_log_buffer_size += tmp_gather_log_buffer_size;
+
+				total_size += tmp_gather_log_size;
+				total_buffer_size += tmp_gather_log_buffer_size;
+			}
+
+			// combine log
+			{
+				size_t tmp_combine_log_size = 0;
+				size_t tmp_combine_log_buffer_size = 0;
+				size_t tmp_combine_log_element_size = 0;
+
+				tmp_combine_log_element_size += curr_log->compressed_combine_log.GetBytesSize();
+
+				for(size_t i = 0; i < curr_log->compressed_combine_log.size; i++){
+					if(curr_log->compressed_combine_log.artifacts->src[i] != 0){
+						tmp_combine_log_buffer_size += sizeof(data_ptr_t) * curr_log->compressed_combine_log.artifacts->count[i]; // src
+					}
+					if(curr_log->compressed_combine_log.artifacts->target[i] != 0){
+						tmp_combine_log_buffer_size += sizeof(data_ptr_t) * curr_log->compressed_combine_log.artifacts->count[i]; // dst
+					}
+				}
+
+				tmp_combine_log_size = tmp_combine_log_element_size + tmp_combine_log_buffer_size;
+
+				combine_log_size += tmp_combine_log_size;
+				combine_log_buffer_size += tmp_combine_log_buffer_size;
+
+				total_size += tmp_combine_log_size;
+				total_buffer_size += tmp_combine_log_buffer_size;
+			}
+
+			// finalize states log
+			{
+				size_t tmp_finalize_states_log_size = 0;
+				size_t tmp_finalize_states_log_buffer_size = 0;
+				size_t tmp_finalize_states_log_element_size = 0;
+
+				tmp_finalize_states_log_element_size += curr_log->compressed_finalize_states_log.GetBytesSize();
+
+				for(size_t i = 0; i < curr_log->compressed_finalize_states_log.size; i++){
+					if(curr_log->compressed_finalize_states_log.artifacts->addresses[i] != 0){
+						tmp_finalize_states_log_buffer_size += sizeof(data_ptr_t) * curr_log->compressed_finalize_states_log.artifacts->count[i]; // addresses
+					}
+				}
+
+				tmp_finalize_states_log_size = tmp_finalize_states_log_element_size + tmp_finalize_states_log_buffer_size;
+
+				finalize_states_log_size += tmp_finalize_states_log_size;
+				finalize_states_log_buffer_size += tmp_finalize_states_log_buffer_size;
+
+				total_size += tmp_finalize_states_log_size;
+				total_buffer_size += tmp_finalize_states_log_buffer_size;
+			}
+
+			// join gather log
+			{
+				size_t tmp_join_gather_log_size = 0;
+				size_t tmp_join_gather_log_buffer_size = 0;
+				size_t tmp_join_gather_log_element_size = 0;
+
+				tmp_join_gather_log_element_size += curr_log->compressed_join_gather_log.GetBytesSize();
+
+				for(size_t i = 0; i < curr_log->compressed_join_gather_log.size; i++){
+					if(curr_log->compressed_join_gather_log.artifacts->rhs[i] != 0){
+						tmp_join_gather_log_buffer_size += sizeof(data_ptr_t) * curr_log->compressed_join_gather_log.artifacts->count[i]; // rhs
+					}
+					if(curr_log->compressed_join_gather_log.artifacts->lhs[i] != 0){
+						tmp_join_gather_log_buffer_size += sizeof(sel_t) * curr_log->compressed_join_gather_log.artifacts->count[i]; // lhs
+					}
+				}
+
+				tmp_join_gather_log_size = tmp_join_gather_log_element_size + tmp_join_gather_log_buffer_size;
+
+				join_gather_log_size += tmp_join_gather_log_size;
+				join_gather_log_buffer_size += tmp_join_gather_log_buffer_size;
+
+				total_size += tmp_join_gather_log_size;
+				total_buffer_size += tmp_join_gather_log_buffer_size;
+			}
+
+			// reorder log
+			{
+				size_t tmp_reorder_log_size = 0;
+				size_t tmp_reorder_log_buffer_size = 0;
+				size_t tmp_reorder_log_element_size = 0;
+
+				tmp_reorder_log_element_size += sizeof(vector<CompressedReorderLogArtifactList>);
+				tmp_reorder_log_element_size += curr_log->compressed_reorder_log.capacity() * sizeof(CompressedReorderLogArtifactList);
+
+				for(size_t i = 0; i < curr_log->compressed_reorder_log.size(); i++){
+					tmp_reorder_log_element_size += curr_log->compressed_reorder_log[i].GetBytesSize();
+				}
+
+				tmp_reorder_log_buffer_size = 0;
+
+				tmp_reorder_log_size = tmp_reorder_log_element_size + tmp_reorder_log_buffer_size;
+
+				reorder_log_size += tmp_reorder_log_size;
+				reorder_log_buffer_size += tmp_reorder_log_buffer_size;
+
+				total_size += tmp_reorder_log_size;
+				total_buffer_size += tmp_reorder_log_buffer_size;
+			}
+
+			// cross log
+			{
+				size_t tmp_cross_log_size = 0;
+				size_t tmp_cross_log_buffer_size = 0;
+				size_t tmp_cross_log_element_size = 0;
+
+				tmp_cross_log_element_size += curr_log->compressed_cross_log.GetBytesSize();
+
+				tmp_cross_log_buffer_size = 0;
+
+				tmp_cross_log_size = tmp_cross_log_element_size + tmp_cross_log_buffer_size;
+
+				cross_log_size += tmp_cross_log_size;
+				cross_log_buffer_size += tmp_cross_log_buffer_size;
+
+				total_size += tmp_cross_log_size;
+				total_buffer_size += tmp_cross_log_buffer_size;
+			}
+
+			// nlj log
+			{
+				size_t tmp_nlj_log_size = 0;
+				size_t tmp_nlj_log_buffer_size = 0;
+				size_t tmp_nlj_log_element_size = 0;
+
+				tmp_nlj_log_element_size += curr_log->compressed_nlj_log.GetBytesSize();
+
+				for(size_t i = 0; i < curr_log->compressed_nlj_log.size; i++){
+					if(curr_log->compressed_nlj_log.artifacts->left[i] != 0){
+						tmp_nlj_log_buffer_size += sizeof(sel_t) * curr_log->compressed_nlj_log.artifacts->count[i];
+					}
+					if(curr_log->compressed_nlj_log.artifacts->right[i] != 0){
+						tmp_nlj_log_buffer_size += sizeof(sel_t) * curr_log->compressed_nlj_log.artifacts->count[i];
+					}
+				}
+
+				tmp_nlj_log_size = tmp_nlj_log_element_size + tmp_nlj_log_buffer_size;
+
+				nlj_log_size += tmp_nlj_log_size;
+				nlj_log_buffer_size += tmp_nlj_log_buffer_size;
+
+				total_size += tmp_nlj_log_size;
+				total_buffer_size += tmp_nlj_log_buffer_size;
+			}
+		}
+	}
+
+	std::cout << "\ncompressed filter_log_size: " << filter_log_size << std::endl;
+	std::cout << "compressed filter_log_buffer_size: " << filter_log_buffer_size << std::endl;
+
+	std::cout << "compressed limit_offset_size: " << limit_offset_size << std::endl;
+	std::cout << "compressed limit_offset_buffer_size: " << limit_offset_buffer_size << std::endl;
+
+	std::cout << "compressed perfect_full_scan_ht_log_size: " << perfect_full_scan_ht_log_size << std::endl;
+	std::cout << "compressed perfect_full_scan_ht_log_buffer_size: " << perfect_full_scan_ht_log_buffer_size << std::endl;
+
+	std::cout << "compressed perfect_probe_ht_log_size: " << perfect_probe_ht_log_size << std::endl;
+	std::cout << "compressed perfect_probe_ht_log_buffer_size: " << perfect_probe_ht_log_buffer_size << std::endl;
+
+	std::cout << "compressed row_group_log_size: " << row_group_log_size << std::endl;
+	std::cout << "compressed row_group_log_buffer_size: " << row_group_log_buffer_size << std::endl;
+
+	std::cout << "compressed scatter_log_size: " << scatter_log_size << std::endl;
+	std::cout << "compressed scatter_log_buffer_size: " << scatter_log_buffer_size << std::endl;
+
+	std::cout << "compressed scatter_sel_log_size: " << scatter_sel_log_size << std::endl;
+	std::cout << "compressed scatter_sel_log_buffer_size: " << scatter_sel_log_buffer_size << std::endl;
+
+	std::cout << "compressed gather_log_size: " << gather_log_size << std::endl;
+	std::cout << "compressed gather_log_buffer_size: " << gather_log_buffer_size << std::endl;
+
+	std::cout << "compressed combine_log_size: " << combine_log_size << std::endl;
+	std::cout << "compressed combine_log_buffer_size: " << combine_log_buffer_size << std::endl;
+
+	std::cout << "compressed finalize_states_log_size: " << finalize_states_log_size << std::endl;
+	std::cout << "compressed finalize_states_log_buffer_size: " << finalize_states_log_buffer_size << std::endl;
+
+	std::cout << "compressed join_gather_log_size: " << join_gather_log_size << std::endl;
+	std::cout << "compressed join_gather_log_buffer_size: " << join_gather_log_buffer_size << std::endl;
+
+	std::cout << "compressed reorder_log_size: " << reorder_log_size << std::endl;
+	std::cout << "compressed reorder_log_buffer_size: " << reorder_log_buffer_size << std::endl;
+
+	std::cout << "compressed cross_log_size: " << cross_log_size << std::endl;
+	std::cout << "compressed cross_log_buffer_size: " << cross_log_buffer_size << std::endl;
+
+	std::cout << "compressed nlj_log_size: " << nlj_log_size << std::endl;
+	std::cout << "compressed nlj_log_buffer_size: " << nlj_log_buffer_size << std::endl;
+
+	std::cout << "compressed total_size: " << total_size << std::endl;
+	std::cout << "compressed total_buffer_size: " << total_buffer_size << std::endl;
+	std::cout << "compressed total_element_size: " << total_size - total_buffer_size << std::endl;
+
+	return total_size;
+}
+
 } // namespace duckdb
 #endif

@@ -99,7 +99,8 @@ bool PerfectHashJoinExecutor::FullScanHashTable(LogicalType &key_type) {
 			active_log->compressed_perfect_full_scan_ht_log.PushBack(reinterpret_cast<idx_t>(sel_build_copy),
 			                                                         reinterpret_cast<idx_t>(sel_tuples_copy),
 			                                                         reinterpret_cast<idx_t>(tuples_addresses_copy),
-			                                                         key_count, ht.Count());
+			                                                         key_count, ht.Count(),
+			                                                         tuples_addresses.GetBuffer()->GetDataSize());
 		} else {
 			active_log->perfect_full_scan_ht_log.push_back({sel_build.sel_data(), sel_tuples.sel_data(), move(tuples_addresses.GetBuffer()), key_count, ht.Count()});
 		}
