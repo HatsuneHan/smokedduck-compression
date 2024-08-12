@@ -5,6 +5,7 @@
 
 #ifdef LINEAGE
 #include "duckdb/execution/lineage/lineage_manager.hpp"
+#include "lz4.hpp"
 #endif
 
 namespace duckdb {
@@ -52,7 +53,9 @@ OperatorResultType PhysicalFilter::ExecuteInternal(ExecutionContext &context, Da
 #ifdef LINEAGE
     if (lineage_manager->capture && active_log) {
 		if (lineage_manager->compress){
-			active_log->compressed_filter_log.PushBack(0, result_count, active_lop->children[0]->out_start);
+			vector<char*> empty_vector;
+			vector<idx_t> empty_vector_idx_t;
+			active_log->compressed_filter_log.PushBack(empty_vector, empty_vector_idx_t, 0, result_count, active_lop->children[0]->out_start, 0);
 			active_log->SetLatestLSN({active_log->compressed_filter_log.size, 0});
 		} else {
 			active_log->filter_log.push_back({nullptr, result_count, active_lop->children[0]->out_start});
@@ -67,16 +70,116 @@ OperatorResultType PhysicalFilter::ExecuteInternal(ExecutionContext &context, Da
 #ifdef LINEAGE
 		if (lineage_manager->capture && active_log && result_count) {
 			if (lineage_manager->compress){
-				sel_t* sel_copy = new sel_t[result_count];
-				std::copy(state.sel.data(), state.sel.data() + result_count, sel_copy);
-				active_log->compressed_filter_log.PushBack(reinterpret_cast<idx_t>(sel_copy), result_count, active_lop->children[0]->out_start);
+//				sel_t* sel_copy = new sel_t[result_count];
+//				std::copy(state.sel.data(), state.sel.data() + result_count, sel_copy);
+				// print state.sel.data()
+				std::cout << "Total result count: " << result_count << std::endl;
+//				for (size_t i = 0; i < result_count; ++i) {
+//					std::cout << state.sel.data()[i] << " ";
+//				}
+//				std::cout << std::endl;
+
+				vector<char*> bitmap_vector;
+				vector<idx_t> bitmap_sizes;
+
+				if(result_count >= 32) {
+					size_t bitmap_size = (STANDARD_VECTOR_SIZE + 7) / 8;
+					unsigned char* bitmap = new unsigned char[bitmap_size];
+					std::memset(bitmap, 0, bitmap_size);
+					bool is_first = true;
+					size_t prev_index = 0;
+
+					for (size_t i = 0; i < result_count; ++i) {
+						sel_t index = state.sel.data()[i];
+						if (index >= STANDARD_VECTOR_SIZE) {
+							throw std::runtime_error("Index out of range");
+						}
+						if (index > prev_index || is_first) {
+							// ensure monotonicity
+							bitmap[index / 8] |= (1 << (7 - index % 8));
+							is_first = false;
+						} else {
+							// here we finish the current bitmap
+							// compress the bitmap
+							int max_compressed_size = duckdb_lz4::LZ4_compressBound(bitmap_size);
+							char *compressed_bitmap = new char[max_compressed_size];
+							int compressed_size =
+							    duckdb_lz4::LZ4_compress_fast(reinterpret_cast<const char *>(bitmap),
+							                                     compressed_bitmap, bitmap_size, max_compressed_size, 1);
+							if (compressed_size <= 0) {
+								throw std::runtime_error("Compression failed");
+							}
+
+							// resize bitmap
+							char *compressed_bitmap_copy = new char[compressed_size];
+							std::copy(compressed_bitmap, compressed_bitmap + compressed_size, compressed_bitmap_copy);
+							bitmap_vector.push_back(compressed_bitmap_copy);
+							bitmap_sizes.push_back(compressed_size);
+
+							// destruction
+							delete[] compressed_bitmap; // delete the original compressed bitmap
+							delete[] bitmap;            // delete the original bitmap
+
+							// create a new bitmap
+							bitmap = new unsigned char[bitmap_size];
+							std::memset(bitmap, 0, bitmap_size);
+
+							bitmap[index / 8] |= (1 << (7 - index % 8));
+						}
+
+						prev_index = index;
+					}
+
+					// compress the last bitmap
+					int max_compressed_size = duckdb_lz4::LZ4_compressBound(bitmap_size);
+					char *compressed_bitmap = new char[max_compressed_size];
+					int compressed_size =
+					    duckdb_lz4::LZ4_compress_fast(reinterpret_cast<const char *>(bitmap), compressed_bitmap,
+					                                     bitmap_size, max_compressed_size, 1);
+					if (compressed_size <= 0) {
+						throw std::runtime_error("Compression failed");
+					}
+
+					char *compressed_bitmap_copy = new char[compressed_size];
+					std::copy(compressed_bitmap, compressed_bitmap + compressed_size, compressed_bitmap_copy);
+					bitmap_vector.push_back(compressed_bitmap_copy);
+					bitmap_sizes.push_back(compressed_size);
+
+					// destruction
+					delete[] compressed_bitmap; // delete the original compressed bitmap
+					delete[] bitmap;            // delete the original bitmap
+
+					active_log->compressed_filter_log.PushBack(bitmap_vector, bitmap_sizes, bitmap_vector.size(), result_count, active_lop->children[0]->out_start, 1);
+
+					std::cout << "Original size: " << sizeof(sel_t)*result_count << std::endl;
+					size_t tmp_compress_size = 0;
+					size_t tmp_uncompressed_size = 0;
+					for(size_t i = 0; i < bitmap_sizes.size(); i++){
+						tmp_compress_size += bitmap_sizes[i];
+						tmp_uncompressed_size += bitmap_size;
+					}
+					std::cout << "Compressed size: " << tmp_compress_size << std::endl;
+					std::cout << "Uncompressed size: " << tmp_uncompressed_size << std::endl;
+				} else {
+					sel_t* sel_copy = new sel_t[result_count];
+					std::copy(state.sel.data(), state.sel.data() + result_count, sel_copy);
+
+					bitmap_vector.push_back(reinterpret_cast<char*>(sel_copy));
+					vector<idx_t> size_vector;
+					size_vector.push_back(result_count * sizeof(sel_t));
+
+					active_log->compressed_filter_log.PushBack(bitmap_vector, size_vector, 1, result_count, active_lop->children[0]->out_start, 0);
+				}
+
 				active_log->SetLatestLSN({active_log->compressed_filter_log.size, 0});
+
 			} else {
 				unique_ptr<sel_t[]> sel_copy(new sel_t[result_count]);
 				std::copy(state.sel.data(), state.sel.data() + result_count, sel_copy.get());
 				active_log->filter_log.push_back({move(sel_copy), result_count, active_lop->children[0]->out_start});
 				active_log->SetLatestLSN({active_log->filter_log.size(), 0});
 			}
+
 		}
 #endif
 		chunk.Slice(input, state.sel, result_count);

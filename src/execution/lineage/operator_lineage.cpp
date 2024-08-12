@@ -2,6 +2,8 @@
 
 #include "duckdb/execution/lineage/operator_lineage.hpp"
 
+#include "lz4.hpp"
+
 namespace duckdb {
 
 void OperatorLineage::PostProcess() {
@@ -18,14 +20,23 @@ void OperatorLineage::PostProcess() {
 		  if (log.count(tkey) == 0 || log[tkey]->compressed_filter_log.size == 0){
 			  continue;
 		  }
+
 		  for (size_t k=0; k < log[tkey]->compressed_filter_log.size; ++k) {
 			  idx_t res_count = log[tkey]->compressed_filter_log.artifacts->count[k];
 			  idx_t offset = log[tkey]->compressed_filter_log.artifacts->in_start[k];
-			  idx_t payload_num = log[tkey]->compressed_filter_log.artifacts->sel[k];
-			  if (payload_num) {
-				  auto payload = reinterpret_cast<sel_t*>(payload_num);
-				  for (idx_t j=0; j < res_count; ++j) {
-					  payload[j] += offset;
+			  idx_t use_bitmap = log[tkey]->compressed_filter_log.artifacts->use_bitmap[k];
+			  idx_t start_bitmap_idx = log[tkey]->compressed_filter_log.artifacts->start_bitmap_idx[k];
+			  idx_t bitmap_num = log[tkey]->compressed_filter_log.artifacts->start_bitmap_idx[k+1] - start_bitmap_idx;
+
+			  if (bitmap_num) {
+				  if (use_bitmap) {
+					  continue;
+				  } else {
+					  idx_t ptr_num = log[tkey]->compressed_filter_log.artifacts->sel[start_bitmap_idx];
+					  auto payload = reinterpret_cast<sel_t*>(ptr_num);
+					  for (idx_t j=0; j < res_count; ++j) {
+						  payload[j] += offset;
+					  }
 				  }
 			  }
 		  }
@@ -587,6 +598,7 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
 		idx_t count;
 		idx_t offset;
 		data_ptr_t ptr = nullptr;
+
 		if(lineage_manager->compress){
 			if (data_idx >= log->compressed_filter_log.size){
 				return 0;
@@ -594,10 +606,41 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
 			int lsn = log->execute_internal[data_idx].first-1;
 			count = log->compressed_filter_log.artifacts->count[lsn];
 			offset = log->compressed_filter_log.artifacts->in_start[lsn];
-			idx_t ptr_num = log->compressed_filter_log.artifacts->sel[lsn];
-			if (ptr_num) {
-				ptr = reinterpret_cast<data_ptr_t>(ptr_num);
+			idx_t start_bitmap_idx = log->compressed_filter_log.artifacts->start_bitmap_idx[lsn];
+			idx_t use_bitmap = log->compressed_filter_log.artifacts->use_bitmap[lsn];
+
+			idx_t bitmap_num = log->compressed_filter_log.artifacts->start_bitmap_idx[lsn+1] - start_bitmap_idx;
+
+			if (bitmap_num) {
+				if (use_bitmap){
+					sel_t* sel_copy = new sel_t[count];
+					size_t index = 0;
+
+					for(size_t i = 0; i < bitmap_num; i++){
+						char* compressed_bitmap = reinterpret_cast<char*>(log->compressed_filter_log.artifacts->sel[start_bitmap_idx+i]);
+						idx_t bitmap_size = log->compressed_filter_log.artifacts->sel_size[start_bitmap_idx+i];
+
+						// lz4 uncompress
+						size_t dst_size = (STANDARD_VECTOR_SIZE + 7) / 8;
+						char* decompressed_bitmap = new char[dst_size];
+						size_t decompressed_size = duckdb_lz4::LZ4_decompress_safe(compressed_bitmap, decompressed_bitmap, bitmap_size, dst_size);
+						if (decompressed_size != dst_size) {
+							throw std::runtime_error("Decompression failed");
+						}
+
+						for (size_t j = 0; j < STANDARD_VECTOR_SIZE; ++j) {
+							if (decompressed_bitmap[j / 8] & (1 << (7 - (j % 8)))) {
+								sel_copy[index++] = static_cast<sel_t>(j) + offset; // PostProcess() here
+							}
+						}
+					}
+					ptr = reinterpret_cast<data_ptr_t>(sel_copy);
+				}
+				else {
+					ptr = reinterpret_cast<data_ptr_t>(log->compressed_filter_log.artifacts->sel[start_bitmap_idx]);
+				}
 			}
+
 		} else {
 			if (data_idx >= log->filter_log.size()){
 				return 0;
@@ -620,6 +663,7 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
 		}
 		chunk.data[1].Sequence(global_count, 1, count); // out_index
 		chunk.data[2].Reference(thread_id_vec);
+
 		break;
 	  }
 	case PhysicalOperatorType::TABLE_SCAN: {
