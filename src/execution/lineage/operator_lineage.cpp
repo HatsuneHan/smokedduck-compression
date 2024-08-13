@@ -617,15 +617,22 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
 					size_t index = 0;
 
 					for(size_t i = 0; i < bitmap_num; i++){
-						char* compressed_bitmap = reinterpret_cast<char*>(log->compressed_filter_log.artifacts->sel[start_bitmap_idx+i]);
-						idx_t bitmap_size = log->compressed_filter_log.artifacts->sel_size[start_bitmap_idx+i];
+						idx_t bitmap_is_compressed = log->compressed_filter_log.artifacts->sel_is_compressed[start_bitmap_idx+i];
+						char* decompressed_bitmap;
 
-						// lz4 uncompress
-						size_t dst_size = (STANDARD_VECTOR_SIZE + 7) / 8;
-						char* decompressed_bitmap = new char[dst_size];
-						size_t decompressed_size = duckdb_lz4::LZ4_decompress_safe(compressed_bitmap, decompressed_bitmap, bitmap_size, dst_size);
-						if (decompressed_size != dst_size) {
-							throw std::runtime_error("Decompression failed");
+						if(bitmap_is_compressed){
+							char* compressed_bitmap = reinterpret_cast<char*>(log->compressed_filter_log.artifacts->sel[start_bitmap_idx+i]);
+							idx_t bitmap_size = log->compressed_filter_log.artifacts->sel_size[start_bitmap_idx+i];
+
+							// lz4 uncompress
+							size_t dst_size = (STANDARD_VECTOR_SIZE + 7) / 8;
+							decompressed_bitmap = new char[dst_size];
+							size_t decompressed_size = duckdb_lz4::LZ4_decompress_safe(compressed_bitmap, decompressed_bitmap, bitmap_size, dst_size);
+							if (decompressed_size != dst_size) {
+								throw std::runtime_error("Decompression failed");
+							}
+						} else {
+							decompressed_bitmap = reinterpret_cast<char*>(log->compressed_filter_log.artifacts->sel[start_bitmap_idx+i]);
 						}
 
 						for (size_t j = 0; j < STANDARD_VECTOR_SIZE; ++j) {

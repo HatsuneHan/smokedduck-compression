@@ -519,7 +519,7 @@ if(NOT MSVC)
     set(CXX_EXTRA "${CXX_EXTRA} -Werror")
   endif()
   set(CMAKE_CXX_FLAGS_DEBUG
-      "${CMAKE_CXX_FLAGS_DEBUG} -g -O0 -DDEBUG -Wall ${M32_FLAG} ${CXX_EXTRA}")
+      "${CMAKE_CXX_FLAGS_DEBUG} -g -O0 -DDEBUG -Wall ${M32_FLAG} ${CXX_EXTRA} -llz4")
   set(CMAKE_CXX_FLAGS_RELEASE
       "${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG ${M32_FLAG} ${CXX_EXTRA}")
   if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND CMAKE_LTO)
@@ -595,6 +595,7 @@ include_directories(third_party/tdigest)
 include_directories(third_party/mbedtls/include)
 include_directories(third_party/jaro_winkler)
 include_directories(third_party/yyjson/include)
+include_directories(third_party/lz4)
 
 # todo only regenerate ub file if one of the input files changed hack alert
 function(enable_unity_build UB_SUFFIX SOURCE_VARIABLE_NAME)

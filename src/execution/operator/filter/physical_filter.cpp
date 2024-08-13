@@ -55,7 +55,8 @@ OperatorResultType PhysicalFilter::ExecuteInternal(ExecutionContext &context, Da
 		if (lineage_manager->compress){
 			vector<char*> empty_vector;
 			vector<idx_t> empty_vector_idx_t;
-			active_log->compressed_filter_log.PushBack(empty_vector, empty_vector_idx_t, 0, result_count, active_lop->children[0]->out_start, 0);
+			vector<idx_t> empty_vector_is_compressed;
+			active_log->compressed_filter_log.PushBack(empty_vector, empty_vector_idx_t, empty_vector_is_compressed, 0, result_count, active_lop->children[0]->out_start, 0);
 			active_log->SetLatestLSN({active_log->compressed_filter_log.size, 0});
 		} else {
 			active_log->filter_log.push_back({nullptr, result_count, active_lop->children[0]->out_start});
@@ -70,17 +71,9 @@ OperatorResultType PhysicalFilter::ExecuteInternal(ExecutionContext &context, Da
 #ifdef LINEAGE
 		if (lineage_manager->capture && active_log && result_count) {
 			if (lineage_manager->compress){
-//				sel_t* sel_copy = new sel_t[result_count];
-//				std::copy(state.sel.data(), state.sel.data() + result_count, sel_copy);
-				// print state.sel.data()
-				std::cout << "Total result count: " << result_count << std::endl;
-//				for (size_t i = 0; i < result_count; ++i) {
-//					std::cout << state.sel.data()[i] << " ";
-//				}
-//				std::cout << std::endl;
-
 				vector<char*> bitmap_vector;
 				vector<idx_t> bitmap_sizes;
+				vector<idx_t> bitmap_is_compressed;
 
 				if(result_count >= 32) {
 					size_t bitmap_size = (STANDARD_VECTOR_SIZE + 7) / 8;
@@ -88,6 +81,7 @@ OperatorResultType PhysicalFilter::ExecuteInternal(ExecutionContext &context, Da
 					std::memset(bitmap, 0, bitmap_size);
 					bool is_first = true;
 					size_t prev_index = 0;
+					size_t curr_bitmap_num = 0;
 
 					for (size_t i = 0; i < result_count; ++i) {
 						sel_t index = state.sel.data()[i];
@@ -98,77 +92,140 @@ OperatorResultType PhysicalFilter::ExecuteInternal(ExecutionContext &context, Da
 							// ensure monotonicity
 							bitmap[index / 8] |= (1 << (7 - index % 8));
 							is_first = false;
+							curr_bitmap_num += 1;
 						} else {
 							// here we finish the current bitmap
 							// compress the bitmap
-							int max_compressed_size = duckdb_lz4::LZ4_compressBound(bitmap_size);
-							char *compressed_bitmap = new char[max_compressed_size];
-							int compressed_size =
-							    duckdb_lz4::LZ4_compress_fast(reinterpret_cast<const char *>(bitmap),
-							                                     compressed_bitmap, bitmap_size, max_compressed_size, 1);
-							if (compressed_size <= 0) {
-								throw std::runtime_error("Compression failed");
+							if(curr_bitmap_num <= STANDARD_VECTOR_SIZE/4 || curr_bitmap_num >= 3*STANDARD_VECTOR_SIZE/4){
+								int max_compressed_size = duckdb_lz4::LZ4_compressBound(bitmap_size);
+								char *compressed_bitmap = new char[max_compressed_size];
+								int compressed_size =
+								    duckdb_lz4::LZ4_compress_fast(reinterpret_cast<const char *>(bitmap),
+								                                  compressed_bitmap, bitmap_size, max_compressed_size, 1);
+								if (compressed_size <= 0) {
+									throw std::runtime_error("Compression failed");
+								}
+
+								// resize bitmap
+								char *compressed_bitmap_copy = new char[compressed_size];
+								std::copy(compressed_bitmap, compressed_bitmap + compressed_size, compressed_bitmap_copy);
+								bitmap_vector.push_back(compressed_bitmap_copy);
+								bitmap_sizes.push_back(compressed_size);
+								bitmap_is_compressed.push_back(1);
+
+								// destruction
+								delete[] compressed_bitmap; // delete the original compressed bitmap
+								delete[] bitmap;            // delete the original bitmap
+							} else {
+								// no need to lz4 compress
+								bitmap_vector.push_back(reinterpret_cast<char*>(bitmap));
+								bitmap_sizes.push_back(bitmap_size);
+								bitmap_is_compressed.push_back(0);
 							}
-
-							// resize bitmap
-							char *compressed_bitmap_copy = new char[compressed_size];
-							std::copy(compressed_bitmap, compressed_bitmap + compressed_size, compressed_bitmap_copy);
-							bitmap_vector.push_back(compressed_bitmap_copy);
-							bitmap_sizes.push_back(compressed_size);
-
-							// destruction
-							delete[] compressed_bitmap; // delete the original compressed bitmap
-							delete[] bitmap;            // delete the original bitmap
 
 							// create a new bitmap
 							bitmap = new unsigned char[bitmap_size];
 							std::memset(bitmap, 0, bitmap_size);
 
 							bitmap[index / 8] |= (1 << (7 - index % 8));
+							curr_bitmap_num = 1;
 						}
 
 						prev_index = index;
 					}
+					if(curr_bitmap_num <= STANDARD_VECTOR_SIZE/4 || curr_bitmap_num >= 3*STANDARD_VECTOR_SIZE/4){
+						// compress the last bitmap
+						int max_compressed_size = duckdb_lz4::LZ4_compressBound(bitmap_size);
+						char *compressed_bitmap = new char[max_compressed_size];
+						int compressed_size =
+						    duckdb_lz4::LZ4_compress_fast(reinterpret_cast<const char *>(bitmap), compressed_bitmap,
+						                                  bitmap_size, max_compressed_size, 1);
+						if (compressed_size <= 0) {
+							throw std::runtime_error("Compression failed");
+						}
 
-					// compress the last bitmap
-					int max_compressed_size = duckdb_lz4::LZ4_compressBound(bitmap_size);
-					char *compressed_bitmap = new char[max_compressed_size];
-					int compressed_size =
-					    duckdb_lz4::LZ4_compress_fast(reinterpret_cast<const char *>(bitmap), compressed_bitmap,
-					                                     bitmap_size, max_compressed_size, 1);
-					if (compressed_size <= 0) {
-						throw std::runtime_error("Compression failed");
+						char *compressed_bitmap_copy = new char[compressed_size];
+						std::copy(compressed_bitmap, compressed_bitmap + compressed_size, compressed_bitmap_copy);
+						bitmap_vector.push_back(compressed_bitmap_copy);
+						bitmap_sizes.push_back(compressed_size);
+						bitmap_is_compressed.push_back(1);
+
+						// destruction
+						delete[] compressed_bitmap; // delete the original compressed bitmap
+						delete[] bitmap;            // delete the original bitmap
+
+					} else {
+						bitmap_vector.push_back(reinterpret_cast<char*>(bitmap));
+						bitmap_sizes.push_back(bitmap_size);
+						bitmap_is_compressed.push_back(0);
 					}
 
-					char *compressed_bitmap_copy = new char[compressed_size];
-					std::copy(compressed_bitmap, compressed_bitmap + compressed_size, compressed_bitmap_copy);
-					bitmap_vector.push_back(compressed_bitmap_copy);
-					bitmap_sizes.push_back(compressed_size);
+					active_log->compressed_filter_log.PushBack(bitmap_vector, bitmap_sizes, bitmap_is_compressed, bitmap_vector.size(), result_count, active_lop->children[0]->out_start, 1);
+					{
 
-					// destruction
-					delete[] compressed_bitmap; // delete the original compressed bitmap
-					delete[] bitmap;            // delete the original bitmap
 
-					active_log->compressed_filter_log.PushBack(bitmap_vector, bitmap_sizes, bitmap_vector.size(), result_count, active_lop->children[0]->out_start, 1);
+//					std::cout << "Original size: " << sizeof(sel_t)*result_count << std::endl;
+//					size_t tmp_compress_size = 0;
+//					size_t tmp_uncompressed_size = 0;
+//					for(size_t i = 0; i < bitmap_sizes.size(); i++){
+//						tmp_compress_size += bitmap_sizes[i];
+//						tmp_uncompressed_size += bitmap_size;
+//					}
+//					std::cout << "Compressed size: " << tmp_compress_size << std::endl;
+//					std::cout << "Uncompressed size: " << tmp_uncompressed_size << std::endl;
 
-					std::cout << "Original size: " << sizeof(sel_t)*result_count << std::endl;
-					size_t tmp_compress_size = 0;
-					size_t tmp_uncompressed_size = 0;
-					for(size_t i = 0; i < bitmap_sizes.size(); i++){
-						tmp_compress_size += bitmap_sizes[i];
-						tmp_uncompressed_size += bitmap_size;
+//					sel_t* test_sel_copy = new sel_t[result_count];
+//					size_t index = 0;
+//
+//					for(size_t i = 0; i < bitmap_vector.size(); i++){
+//						idx_t is_compressed = bitmap_is_compressed[i];
+//						char* decompressed_bitmap;
+//
+//						if(is_compressed){
+//							char* compressed_bitmap = reinterpret_cast<char*>(bitmap_vector[i]);
+//							idx_t bitmap_size = bitmap_sizes[i];
+//
+//							// lz4 uncompress
+//							size_t dst_size = (STANDARD_VECTOR_SIZE + 7) / 8;
+//							decompressed_bitmap = new char[dst_size];
+//							size_t decompressed_size = duckdb_lz4::LZ4_decompress_safe(compressed_bitmap, decompressed_bitmap, bitmap_size, dst_size);
+//							if (decompressed_size != dst_size) {
+//								throw std::runtime_error("Decompression failed");
+//							}
+//						} else {
+//							decompressed_bitmap = reinterpret_cast<char*>(bitmap_vector[i]);
+//						}
+//
+//						for (size_t j = 0; j < STANDARD_VECTOR_SIZE; ++j) {
+//							if (decompressed_bitmap[j / 8] & (1 << (7 - (j % 8)))) {
+//								test_sel_copy[index++] = static_cast<sel_t>(j); // PostProcess() here
+//							}
+//						}
+//					}
+//
+//					std::cout << "bitmap uncompressed is\n";
+//					for (size_t i = 0; i < result_count; ++i) {
+//						std::cout << test_sel_copy[i] << " ";
+//					}
+//					std::cout << std::endl;
+//
+//					// print
+//					std::cout << "state.sel is\n";
+//					for (size_t i = 0; i < result_count; ++i) {
+//						std::cout << state.sel.data()[i] << " ";
+//					}
+//					std::cout << std::endl;
 					}
-					std::cout << "Compressed size: " << tmp_compress_size << std::endl;
-					std::cout << "Uncompressed size: " << tmp_uncompressed_size << std::endl;
+
 				} else {
 					sel_t* sel_copy = new sel_t[result_count];
 					std::copy(state.sel.data(), state.sel.data() + result_count, sel_copy);
 
 					bitmap_vector.push_back(reinterpret_cast<char*>(sel_copy));
-					vector<idx_t> size_vector;
-					size_vector.push_back(result_count * sizeof(sel_t));
+					bitmap_sizes.push_back(result_count * sizeof(sel_t));
+					bitmap_is_compressed.push_back(0);
 
-					active_log->compressed_filter_log.PushBack(bitmap_vector, size_vector, 1, result_count, active_lop->children[0]->out_start, 0);
+					active_log->compressed_filter_log.PushBack(bitmap_vector, bitmap_sizes, bitmap_is_compressed, 1, result_count, active_lop->children[0]->out_start, 0);
 				}
 
 				active_log->SetLatestLSN({active_log->compressed_filter_log.size, 0});
