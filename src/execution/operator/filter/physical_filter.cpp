@@ -56,10 +56,9 @@ OperatorResultType PhysicalFilter::ExecuteInternal(ExecutionContext &context, Da
 				vector<idx_t> empty_vector;
 				vector<idx_t> empty_vector_idx_t;
 				vector<idx_t> empty_vector_is_compressed;
-				std::cout << "Begin PushBack\n";
+
 				active_log->compressed_filter_log.PushBack(empty_vector, empty_vector_idx_t, empty_vector_is_compressed,
 				                                           0, result_count, active_lop->children[0]->out_start, 0);
-				std::cout << "PushBack Successfully\n";
 				active_log->SetLatestLSN({active_log->compressed_filter_log.size, 0});
 			} else {
 				active_log->filter_log.push_back({nullptr, result_count, active_lop->children[0]->out_start});
@@ -76,10 +75,6 @@ OperatorResultType PhysicalFilter::ExecuteInternal(ExecutionContext &context, Da
 
 				vector<vector<idx_t>> result_vector =
 				    active_log->compressed_filter_log.ChangeSelToBitMap(state.sel.data(), result_count);
-
-				if(active_lop->children[0]->out_start < 3000){
-					std::cout << "offset is " << active_lop->children[0]->out_start << "\n";
-				}
 
 				vector<idx_t> &bitmap_vector = result_vector[0];
 				vector<idx_t> &bitmap_sizes = result_vector[1];
