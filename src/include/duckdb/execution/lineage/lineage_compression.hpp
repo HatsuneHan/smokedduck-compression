@@ -9,7 +9,8 @@
 #include "duckdb/common/types/selection_vector.hpp"
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/common/unordered_map.hpp"
-//#include "duckdb/execution/lineage/lineage_manager.hpp"
+
+// #include "duckdb/execution/lineage/lineage_manager.hpp"
 
 #include <iostream>
 
@@ -170,7 +171,7 @@ public:
 		size = 0;
 	}
 
-	void PushBack(const vector<char*>& sel_p, const vector<idx_t>& sel_size_p, const vector<idx_t>& sel_is_compressed_p, const idx_t bitmap_num_p, idx_t count_p, idx_t in_start_p, idx_t use_bitmap_p){
+	void PushBack(const vector<idx_t>& sel_p, const vector<idx_t>& sel_size_p, const vector<idx_t>& sel_is_compressed_p, const idx_t bitmap_num_p, idx_t count_p, idx_t in_start_p, idx_t use_bitmap_p){
 		if (size == 0) {
 			artifacts = new CompressedFilterArtifacts();
 			artifacts->total_bitmap_num = 0;
@@ -178,13 +179,13 @@ public:
 		}
 
 		for(size_t i = 0; i < bitmap_num_p; i++){
-			artifacts->sel.PushBack(reinterpret_cast<idx_t>(sel_p[i]), artifacts->total_bitmap_num);
+			artifacts->sel.PushBack(sel_p[i], artifacts->total_bitmap_num);
 			artifacts->sel_size.PushBack(sel_size_p[i], artifacts->total_bitmap_num);
 			artifacts->sel_is_compressed.PushBack(sel_is_compressed_p[i], artifacts->total_bitmap_num);
+			artifacts->total_bitmap_num += 1;
 		}
 
 		artifacts->start_bitmap_idx.PushBack(bitmap_num_p + artifacts->start_bitmap_idx[size], size + 1);
-		artifacts->total_bitmap_num += bitmap_num_p;
 
 		artifacts->count.PushBack(count_p, size);
 		artifacts->in_start.PushBack(in_start_p, size);
@@ -208,6 +209,12 @@ public:
 			       + sizeof(CompressedFilterArtifactList);
 		}
 	}
+
+	vector<idx_t> CompressBitmap(idx_t curr_bitmap_size, unsigned char* bitmap);
+	unsigned char* DecompressBitmap(idx_t compressed_bitmap_size, idx_t bitmap_is_compressed, unsigned char* compressed_bitmap);
+
+	vector<vector<idx_t>> ChangeSelToBitMap(sel_t* sel_data, idx_t result_count);
+	sel_t* ChangeBitMapToSel(idx_t lsn);
 
 public:
 	// Member variables

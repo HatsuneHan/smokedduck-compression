@@ -606,47 +606,9 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
 			int lsn = log->execute_internal[data_idx].first-1;
 			count = log->compressed_filter_log.artifacts->count[lsn];
 			offset = log->compressed_filter_log.artifacts->in_start[lsn];
-			idx_t start_bitmap_idx = log->compressed_filter_log.artifacts->start_bitmap_idx[lsn];
-			idx_t use_bitmap = log->compressed_filter_log.artifacts->use_bitmap[lsn];
 
-			idx_t bitmap_num = log->compressed_filter_log.artifacts->start_bitmap_idx[lsn+1] - start_bitmap_idx;
-
-			if (bitmap_num) {
-				if (use_bitmap){
-					sel_t* sel_copy = new sel_t[count];
-					size_t index = 0;
-
-					for(size_t i = 0; i < bitmap_num; i++){
-						idx_t bitmap_is_compressed = log->compressed_filter_log.artifacts->sel_is_compressed[start_bitmap_idx+i];
-						char* decompressed_bitmap;
-
-						if(bitmap_is_compressed){
-							char* compressed_bitmap = reinterpret_cast<char*>(log->compressed_filter_log.artifacts->sel[start_bitmap_idx+i]);
-							idx_t bitmap_size = log->compressed_filter_log.artifacts->sel_size[start_bitmap_idx+i];
-
-							// lz4 uncompress
-							size_t dst_size = (STANDARD_VECTOR_SIZE + 7) / 8;
-							decompressed_bitmap = new char[dst_size];
-							size_t decompressed_size = duckdb_lz4::LZ4_decompress_safe(compressed_bitmap, decompressed_bitmap, bitmap_size, dst_size);
-							if (decompressed_size != dst_size) {
-								throw std::runtime_error("Decompression failed");
-							}
-						} else {
-							decompressed_bitmap = reinterpret_cast<char*>(log->compressed_filter_log.artifacts->sel[start_bitmap_idx+i]);
-						}
-
-						for (size_t j = 0; j < STANDARD_VECTOR_SIZE; ++j) {
-							if (decompressed_bitmap[j / 8] & (1 << (7 - (j % 8)))) {
-								sel_copy[index++] = static_cast<sel_t>(j) + offset; // PostProcess() here
-							}
-						}
-					}
-					ptr = reinterpret_cast<data_ptr_t>(sel_copy);
-				}
-				else {
-					ptr = reinterpret_cast<data_ptr_t>(log->compressed_filter_log.artifacts->sel[start_bitmap_idx]);
-				}
-			}
+			sel_t* sel_copy = log->compressed_filter_log.ChangeBitMapToSel(lsn);
+			ptr = reinterpret_cast<data_ptr_t>(sel_copy);
 
 		} else {
 			if (data_idx >= log->filter_log.size()){

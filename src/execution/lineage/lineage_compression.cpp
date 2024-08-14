@@ -214,6 +214,169 @@ namespace duckdb {
 	    delta_buffer_size = new_buffer_size;
     }
 
+    vector<idx_t> CompressedFilterArtifactList::CompressBitmap(duckdb::idx_t curr_bitmap_size, unsigned char *bitmap) {
+
+	    idx_t bitmap_size = (STANDARD_VECTOR_SIZE + 7) / 8;
+
+	    vector<idx_t> result_vector;
+
+	    if(curr_bitmap_size <= STANDARD_VECTOR_SIZE/4 || curr_bitmap_size >= 3*STANDARD_VECTOR_SIZE/4){
+		    int max_compressed_size = duckdb_lz4::LZ4_compressBound(bitmap_size);
+		    char *compressed_bitmap = new char[max_compressed_size];
+		    int compressed_size =
+		        duckdb_lz4::LZ4_compress_fast(reinterpret_cast<const char *>(bitmap),
+		                                      compressed_bitmap, bitmap_size, max_compressed_size, 1);
+		    if (compressed_size <= 0) {
+			    throw std::runtime_error("Compression failed");
+		    }
+
+		    // resize bitmap
+		    unsigned char *compressed_bitmap_copy = new unsigned char[compressed_size];
+		    std::copy(compressed_bitmap, compressed_bitmap + compressed_size, compressed_bitmap_copy);
+
+		    result_vector.push_back(reinterpret_cast<idx_t>(compressed_bitmap_copy));
+		    result_vector.push_back(compressed_size);
+		    result_vector.push_back(1);
+
+		    // destruction
+		    delete[] compressed_bitmap; // delete the original compressed bitmap
+		    delete[] bitmap;            // delete the original bitmap
+
+	    } else {
+		    // no need to lz4 compress
+		    result_vector.push_back(reinterpret_cast<idx_t>(bitmap));
+		    result_vector.push_back(bitmap_size);
+		    result_vector.push_back(0);
+	    }
+
+	    return result_vector;
+    }
+
+    unsigned char* CompressedFilterArtifactList::DecompressBitmap(idx_t compressed_bitmap_size,
+                                                                  idx_t bitmap_is_compressed,
+                                                                  unsigned char *compressed_bitmap) {
+	    unsigned char* decompressed_bitmap;
+
+	    if(bitmap_is_compressed){
+		    // lz4 uncompress
+		    size_t dst_size = (STANDARD_VECTOR_SIZE + 7) / 8;
+		    char* tmp_decompressed_bitmap = new char[dst_size];
+		    size_t decompressed_size = duckdb_lz4::LZ4_decompress_safe(reinterpret_cast<char *>(compressed_bitmap), tmp_decompressed_bitmap, compressed_bitmap_size, dst_size);
+		    if (decompressed_size != dst_size) {
+			    throw std::runtime_error("Decompression failed");
+		    }
+		    decompressed_bitmap = reinterpret_cast<unsigned char*>(tmp_decompressed_bitmap);
+	    } else {
+		    decompressed_bitmap = compressed_bitmap;
+	    }
+
+	    return decompressed_bitmap;
+    }
+
+    vector<vector<idx_t>> CompressedFilterArtifactList::ChangeSelToBitMap(sel_t* sel_data, idx_t result_count){
+	    vector<idx_t> bitmap_vector;
+	    vector<idx_t> bitmap_sizes;
+	    vector<idx_t> bitmap_is_compressed;
+	    vector<idx_t> use_bitmap;
+
+	    if(result_count >= 32) {
+		    size_t bitmap_size = (STANDARD_VECTOR_SIZE + 7) / 8;
+		    unsigned char* bitmap = new unsigned char[bitmap_size];
+		    std::memset(bitmap, 0, bitmap_size);
+		    bool is_first = true;
+		    sel_t prev_index = 0;
+		    size_t curr_bitmap_size = 0;
+
+		    for (size_t i = 0; i < result_count; ++i) {
+			    sel_t index = sel_data[i];
+			    if (index >= STANDARD_VECTOR_SIZE) {
+				    throw std::runtime_error("Index out of range");
+			    }
+
+			    if ((index > prev_index) || is_first) {
+				    // ensure monotonicity
+				    bitmap[index / 8] |= (1 << (7 - index % 8));
+				    is_first = false;
+				    curr_bitmap_size += 1;
+			    } else {
+				    // here we finish the current bitmap
+				    // compress the bitmap
+
+					vector<idx_t> result_vector = CompressBitmap(curr_bitmap_size, bitmap);
+				    bitmap_vector.push_back(result_vector[0]);
+				    bitmap_sizes.push_back(result_vector[1]);
+				    bitmap_is_compressed.push_back(result_vector[2]);
+
+				    // create a new bitmap
+				    bitmap = new unsigned char[bitmap_size];
+				    std::memset(bitmap, 0, bitmap_size);
+
+				    bitmap[index / 8] |= (1 << (7 - index % 8));
+				    curr_bitmap_size = 1;
+			    }
+
+			    prev_index = index;
+		    }
+
+		    // compress the last bitmap
+		    vector<idx_t> result_vector = CompressBitmap(curr_bitmap_size, bitmap);
+
+		    bitmap_vector.push_back(result_vector[0]);
+		    bitmap_sizes.push_back(result_vector[1]);
+		    bitmap_is_compressed.push_back(result_vector[2]);
+
+		    use_bitmap.push_back(1);
+
+	    } else {
+		    sel_t* sel_copy = new sel_t[result_count];
+		    std::copy(sel_data, sel_data + result_count, sel_copy);
+
+		    bitmap_vector.push_back(reinterpret_cast<idx_t>(sel_copy));
+		    bitmap_sizes.push_back(result_count * sizeof(sel_t));
+		    bitmap_is_compressed.push_back(0);
+		    use_bitmap.push_back(0);
+	    }
+
+	    vector<vector<idx_t>> func_result_vector = {bitmap_vector, bitmap_sizes, bitmap_is_compressed, use_bitmap};
+	    return func_result_vector;
+    }
+
+    sel_t* CompressedFilterArtifactList::ChangeBitMapToSel(idx_t lsn) {
+	    idx_t count = this->artifacts->count[lsn];
+	    idx_t offset = this->artifacts->in_start[lsn];
+	    idx_t start_bitmap_idx = this->artifacts->start_bitmap_idx[lsn];
+	    idx_t use_bitmap = this->artifacts->use_bitmap[lsn];
+
+	    idx_t bitmap_num = this->artifacts->start_bitmap_idx[lsn+1] - start_bitmap_idx;
+
+	    if (bitmap_num) {
+		    if (use_bitmap){
+			    sel_t* sel_copy = new sel_t[count];
+			    size_t index = 0;
+
+			    for(size_t i = 0; i < bitmap_num; i++){
+
+				    unsigned char* decompressed_bitmap = DecompressBitmap(this->artifacts->sel_size[start_bitmap_idx+i],
+				                                                 this->artifacts->sel_is_compressed[start_bitmap_idx+i],
+				                                                  reinterpret_cast<unsigned char*>(this->artifacts->sel[start_bitmap_idx+i]));
+
+				    for (size_t j = 0; j < STANDARD_VECTOR_SIZE; ++j) {
+					    if (decompressed_bitmap[j / 8] & (1 << (7 - (j % 8)))) {
+						    sel_copy[index++] = static_cast<sel_t>(j) + offset; // PostProcess() here
+					    }
+				    }
+			    }
+			    return sel_copy;
+		    }
+		    else {
+			    return reinterpret_cast<sel_t*>(this->artifacts->sel[start_bitmap_idx]);
+		    }
+	    }
+
+	    return nullptr;
+
+    }
+
 
 }
 
