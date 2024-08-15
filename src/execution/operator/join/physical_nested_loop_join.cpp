@@ -502,12 +502,17 @@ SourceResultType PhysicalNestedLoopJoin::GetData(ExecutionContext &context, Data
 #ifdef LINEAGE
   if (lineage_manager->capture && active_log) {
     if (lineage_manager->compress){
-		sel_t* sel_copy = new sel_t[chunk.size()];
-		std::copy(lstate.scan_state.match_sel.data(),
-			      lstate.scan_state.match_sel.data() + chunk.size(),
-			      sel_copy);
-		active_log->compressed_row_group_log.PushBack(reinterpret_cast<idx_t>(sel_copy), chunk.size(),
-			                                          lstate.scan_state.local_scan.current_row_index, active_lop->children[0]->out_start);
+		vector<vector<idx_t>> result_vector = ChangeSelToBitMap(lstate.scan_state.match_sel.data(), chunk.size());
+
+		vector<idx_t> &bitmap_vector = result_vector[0];
+		vector<idx_t> &bitmap_sizes = result_vector[1];
+		vector<idx_t> &bitmap_is_compressed = result_vector[2];
+		vector<idx_t> &use_bitmap = result_vector[3];
+
+		active_log->compressed_row_group_log.PushBack(bitmap_vector, bitmap_sizes, bitmap_is_compressed,
+			                                          bitmap_vector.size(), chunk.size(), lstate.scan_state.local_scan.current_row_index,
+			                                          active_lop->children[0]->out_start, use_bitmap[0]);
+
 	} else {
 		//buffer_ptr<SelectionData> sel_copy = make_shared_ptr<SelectionData>(chunk.size());
 		unique_ptr<sel_t[]> sel_copy(new sel_t[chunk.size()]);

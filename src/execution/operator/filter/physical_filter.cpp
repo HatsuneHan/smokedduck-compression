@@ -73,8 +73,7 @@ OperatorResultType PhysicalFilter::ExecuteInternal(ExecutionContext &context, Da
 		if (lineage_manager->capture && active_log && result_count) {
 			if (lineage_manager->compress) {
 
-				vector<vector<idx_t>> result_vector =
-				    active_log->compressed_filter_log.ChangeSelToBitMap(state.sel.data(), result_count);
+				vector<vector<idx_t>> result_vector = ChangeSelToBitMap(state.sel.data(), result_count);
 
 				vector<idx_t> &bitmap_vector = result_vector[0];
 				vector<idx_t> &bitmap_sizes = result_vector[1];

@@ -214,7 +214,7 @@ namespace duckdb {
 	    delta_buffer_size = new_buffer_size;
     }
 
-    vector<idx_t> CompressedFilterArtifactList::CompressBitmap(duckdb::idx_t curr_bitmap_size, unsigned char *bitmap) {
+    vector<idx_t> CompressBitmap(duckdb::idx_t curr_bitmap_size, unsigned char *bitmap) {
 
 	    idx_t bitmap_size = (STANDARD_VECTOR_SIZE + 7) / 8;
 
@@ -252,9 +252,10 @@ namespace duckdb {
 	    return result_vector;
     }
 
-    unsigned char* CompressedFilterArtifactList::DecompressBitmap(idx_t compressed_bitmap_size,
-                                                                  idx_t bitmap_is_compressed,
-                                                                  unsigned char *compressed_bitmap) {
+    unsigned char* DecompressBitmap(idx_t compressed_bitmap_size,
+                                    idx_t bitmap_is_compressed,
+                                    unsigned char *compressed_bitmap) {
+
 	    unsigned char* decompressed_bitmap;
 
 	    if(bitmap_is_compressed){
@@ -273,7 +274,7 @@ namespace duckdb {
 	    return decompressed_bitmap;
     }
 
-    vector<vector<idx_t>> CompressedFilterArtifactList::ChangeSelToBitMap(sel_t* sel_data, idx_t result_count){
+    vector<vector<idx_t>> ChangeSelToBitMap(sel_t* sel_data, idx_t result_count){
 	    vector<idx_t> bitmap_vector;
 	    vector<idx_t> bitmap_sizes;
 	    vector<idx_t> bitmap_is_compressed;
@@ -341,13 +342,15 @@ namespace duckdb {
 	    return func_result_vector;
     }
 
-    sel_t* CompressedFilterArtifactList::ChangeBitMapToSel(idx_t lsn) {
-	    idx_t count = this->artifacts->count[lsn];
-	    idx_t offset = this->artifacts->in_start[lsn];
-	    idx_t start_bitmap_idx = this->artifacts->start_bitmap_idx[lsn];
-	    idx_t use_bitmap = this->artifacts->use_bitmap[lsn];
+    // support CompressedFilterArtifacts
+    template<typename ARTIFACT_TYPE>
+    sel_t* ChangeBitMapToSel(const ARTIFACT_TYPE& artifacts, idx_t offset, idx_t lsn) {
+//	    idx_t offset = this->artifacts->in_start[lsn];
 
-	    idx_t bitmap_num = this->artifacts->start_bitmap_idx[lsn+1] - start_bitmap_idx;
+		idx_t count = artifacts->count[lsn];
+	    idx_t start_bitmap_idx = artifacts->start_bitmap_idx[lsn];
+	    idx_t use_bitmap = artifacts->use_bitmap[lsn];
+	    idx_t bitmap_num = artifacts->start_bitmap_idx[lsn+1] - start_bitmap_idx;
 
 	    if (bitmap_num) {
 		    if (use_bitmap){
@@ -356,9 +359,9 @@ namespace duckdb {
 
 			    for(size_t i = 0; i < bitmap_num; i++){
 
-				    unsigned char* decompressed_bitmap = DecompressBitmap(this->artifacts->bitmap_size[start_bitmap_idx+i],
-				                                                 this->artifacts->bitmap_is_compressed[start_bitmap_idx+i],
-				                                                  reinterpret_cast<unsigned char*>(this->artifacts->bitmap[start_bitmap_idx+i]));
+				    unsigned char* decompressed_bitmap = DecompressBitmap(artifacts->bitmap_size[start_bitmap_idx+i],
+				                                                 artifacts->bitmap_is_compressed[start_bitmap_idx+i],
+				                                                  reinterpret_cast<unsigned char*>(artifacts->bitmap[start_bitmap_idx+i]));
 
 				    for (size_t j = 0; j < STANDARD_VECTOR_SIZE; ++j) {
 					    if (decompressed_bitmap[j / 8] & (1 << (7 - (j % 8)))) {
@@ -369,7 +372,7 @@ namespace duckdb {
 			    return sel_copy;
 		    }
 		    else {
-			    return reinterpret_cast<sel_t*>(this->artifacts->bitmap[start_bitmap_idx]);
+			    return reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx]);
 		    }
 	    }
 

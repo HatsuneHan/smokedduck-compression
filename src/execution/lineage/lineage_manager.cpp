@@ -755,9 +755,11 @@ size_t LineageManager::GetCompressedArtifactSize() {
 
 				tmp_row_group_log_element_size += curr_log->compressed_row_group_log.GetBytesSize();
 
-				for(size_t i = 0; i < curr_log->compressed_row_group_log.size; i++){
-					if(curr_log->compressed_row_group_log.artifacts->sel[i] != 0){
-						tmp_row_group_log_buffer_size += sizeof(sel_t) * curr_log->compressed_row_group_log.artifacts->count[i]; // sel
+				if(curr_log->compressed_row_group_log.size != 0){
+					idx_t total_bitmap_num = curr_log->compressed_row_group_log.artifacts->start_bitmap_idx[curr_log->compressed_row_group_log.size];
+
+					for(size_t i = 0; i < total_bitmap_num; i++){
+						tmp_row_group_log_buffer_size += curr_log->compressed_row_group_log.artifacts->bitmap_size[i]; // sel_size
 					}
 				}
 

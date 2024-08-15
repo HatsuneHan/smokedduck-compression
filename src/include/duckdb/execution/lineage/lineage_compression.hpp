@@ -29,6 +29,14 @@ class CompressedLimitArtifactList;
 class CompressedReorderLogArtifactList;
 class CompressedCrossArtifactList;
 class CompressedNLJArtifactList;
+
+vector<idx_t> CompressBitmap(idx_t, unsigned char*);
+unsigned char* DecompressBitmap(idx_t, idx_t, unsigned char *);
+vector<vector<idx_t>> ChangeSelToBitMap(sel_t*, idx_t);
+
+template<typename ARTIFACT_TYPE>
+sel_t* ChangeBitMapToSel(const ARTIFACT_TYPE&, idx_t, idx_t);
+
 // use to replace vector<idx_t>
 
 class Compressed64List{
@@ -56,10 +64,15 @@ public:
 };
 
 struct CompressedScanArtifacts {
-	Compressed64List sel;
+	Compressed64List bitmap;
+	Compressed64List bitmap_size;
+	Compressed64List bitmap_is_compressed;
+
+	Compressed64List start_bitmap_idx;
 	Compressed64List count;
 	Compressed64List start;
 	Compressed64List vector_index;
+	Compressed64List use_bitmap;
 };
 
 class CompressedScanArtifactList{
@@ -70,50 +83,70 @@ public:
 
 	// Destructor
 	~CompressedScanArtifactList() {
-		for(size_t i = 0; i < size; i++){
-			// when without compression, we use move(), so we have the ownership of the memory
-			// if we delete the memory, we also need to delete the memory of the pointer we record
-			sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->sel[i]);
-			delete[] sel_addr;
+		if(artifacts != nullptr){
+			idx_t total_bitmap_num = artifacts->start_bitmap_idx[size];
+			for(size_t i = 0; i < total_bitmap_num; i++){
+				unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[i]);
+				delete[] sel_addr;
+			}
 		}
+
 		delete artifacts;
 	}
 
 	void Clear(){
-		for(size_t i = 0; i < size; i++){
-			// when without compression, we use move(), so we have the ownership of the memory
-			// if we delete the memory, we also need to delete the memory of the pointer we record
-			sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->sel[i]);
-			delete[] sel_addr;
+		if(artifacts != nullptr){
+			idx_t total_bitmap_num = artifacts->start_bitmap_idx[size];
+			for(size_t i = 0; i < total_bitmap_num; i++){
+				unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[i]);
+				delete[] sel_addr;
+			}
 		}
+
 		delete artifacts;
 		artifacts = nullptr;
 		size = 0;
 	}
-	
-	void PushBack(idx_t sel_p, idx_t count_p, idx_t start_p, idx_t vector_index_p){
+
+	void PushBack(const vector<idx_t>& bitmap_p, const vector<idx_t>& bitmap_size_p, const vector<idx_t>& bitmap_is_compressed_p, const idx_t bitmap_num_p, idx_t count_p, idx_t start_p, idx_t vector_index_p, idx_t use_bitmap_p){
 		if (size == 0) {
 			artifacts = new CompressedScanArtifacts();
+			artifacts->start_bitmap_idx.PushBack(0, size);
 		}
 
-		this->artifacts->sel.PushBack(sel_p, size);
-		this->artifacts->count.PushBack(count_p, size);
-		this->artifacts->start.PushBack(start_p, size);
-		this->artifacts->vector_index.PushBack(vector_index_p, size);
-		
+		idx_t curr_total_bitmap_num = artifacts->start_bitmap_idx[size];
+
+		for(size_t i = 0; i < bitmap_num_p; i++){
+			artifacts->bitmap.PushBack(bitmap_p[i], curr_total_bitmap_num);
+			artifacts->bitmap_size.PushBack(bitmap_size_p[i], curr_total_bitmap_num);
+			artifacts->bitmap_is_compressed.PushBack(bitmap_is_compressed_p[i], curr_total_bitmap_num);
+			curr_total_bitmap_num += 1;
+		}
+
+		artifacts->start_bitmap_idx.PushBack(curr_total_bitmap_num, size + 1);
+
+		artifacts->count.PushBack(count_p, size);
+		artifacts->start.PushBack(start_p, size);
+		artifacts->vector_index.PushBack(vector_index_p, size);
+		artifacts->use_bitmap.PushBack(use_bitmap_p, size);
+
 		size++;
 	}
-	
+
 	size_t GetBytesSize() {
 		// size of the all the elements, not calculating the size of the extra buffers held by the elements
 
 		if(size == 0){
 			return sizeof(CompressedScanArtifactList);
 		} else {
-			return this->artifacts->sel.GetBytesSize()
+			return this->artifacts->bitmap.GetBytesSize()
+			       + this->artifacts->bitmap_size.GetBytesSize()
+			       + this->artifacts->bitmap_is_compressed.GetBytesSize()
+			       + this->artifacts->start_bitmap_idx.GetBytesSize()
 			       + this->artifacts->count.GetBytesSize()
 			       + this->artifacts->start.GetBytesSize()
 			       + this->artifacts->vector_index.GetBytesSize()
+			       + this->artifacts->use_bitmap.GetBytesSize()
 			       + sizeof(CompressedScanArtifactList);
 		}
 	}
@@ -149,7 +182,7 @@ public:
 		if(artifacts != nullptr){
 			idx_t total_bitmap_num = artifacts->start_bitmap_idx[size];
 			for(size_t i = 0; i < total_bitmap_num; i++){
-				char* sel_addr = reinterpret_cast<char*>(artifacts->bitmap[i]);
+				unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[i]);
 				delete[] sel_addr;
 			}
 		}
@@ -162,7 +195,7 @@ public:
 		if(artifacts != nullptr){
 			idx_t total_bitmap_num = artifacts->start_bitmap_idx[size];
 			for(size_t i = 0; i < total_bitmap_num; i++){
-				char* sel_addr = reinterpret_cast<char*>(artifacts->bitmap[i]);
+				unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[i]);
 				delete[] sel_addr;
 			}
 		}
@@ -210,12 +243,6 @@ public:
 			       + sizeof(CompressedFilterArtifactList);
 		}
 	}
-
-	vector<idx_t> CompressBitmap(idx_t curr_bitmap_size, unsigned char* bitmap);
-	unsigned char* DecompressBitmap(idx_t compressed_bitmap_size, idx_t bitmap_is_compressed, unsigned char* compressed_bitmap);
-
-	vector<vector<idx_t>> ChangeSelToBitMap(sel_t* sel_data, idx_t result_count);
-	sel_t* ChangeBitMapToSel(idx_t lsn);
 
 public:
 	// Member variables

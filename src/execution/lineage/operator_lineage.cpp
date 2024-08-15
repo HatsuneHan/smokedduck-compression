@@ -7,7 +7,9 @@
 namespace duckdb {
 
 void OperatorLineage::PostProcess() {
-  if (processed) return;
+	if (processed){
+		return;
+	}
 	thread_vec.reserve(log.size());
 	for (const auto& pair : log) {
 		thread_vec.push_back(pair.first);
@@ -74,13 +76,23 @@ void OperatorLineage::PostProcess() {
 			  idx_t res_count = log[tkey]->compressed_row_group_log.artifacts->count[k];
 			  idx_t offset = log[tkey]->compressed_row_group_log.artifacts->start[k]
 					         + log[tkey]->compressed_row_group_log.artifacts->vector_index[k];
-			  idx_t payload_num = log[tkey]->compressed_row_group_log.artifacts->sel[k];
-			  if (payload_num) {
-				  auto payload = reinterpret_cast<sel_t*>(payload_num);
-				  for (idx_t j=0; j < res_count; ++j) {
-					  payload[j] += offset;
+
+			  idx_t use_bitmap = log[tkey]->compressed_row_group_log.artifacts->use_bitmap[k];
+			  idx_t start_bitmap_idx = log[tkey]->compressed_row_group_log.artifacts->start_bitmap_idx[k];
+			  idx_t bitmap_num = log[tkey]->compressed_row_group_log.artifacts->start_bitmap_idx[k+1] - start_bitmap_idx;
+
+			  if (bitmap_num) {
+				  if (use_bitmap) {
+					  continue;
+				  } else {
+					  idx_t ptr_num = log[tkey]->compressed_row_group_log.artifacts->bitmap[start_bitmap_idx];
+					  auto payload = reinterpret_cast<sel_t*>(ptr_num);
+					  for (idx_t j=0; j < res_count; ++j) {
+						  payload[j] += offset;
+					  }
 				  }
 			  }
+
 		  }
 	  }else{
 		  if (log.count(tkey) == 0 || log[tkey]->row_group_log.empty()){
@@ -607,7 +619,7 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
 			count = log->compressed_filter_log.artifacts->count[lsn];
 			offset = log->compressed_filter_log.artifacts->in_start[lsn];
 
-			sel_t* sel_copy = log->compressed_filter_log.ChangeBitMapToSel(lsn);
+			sel_t* sel_copy = ChangeBitMapToSel(log->compressed_filter_log.artifacts, offset, lsn);
 			ptr = reinterpret_cast<data_ptr_t>(sel_copy);
 
 		} else {
@@ -615,7 +627,6 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
 				return 0;
 			}
 			int lsn = log->execute_internal[data_idx].first-1;
-			// std::cout << "filter: " << data_idx << " " << lsn << std::endl;
 			count = log->filter_log[lsn].count;
 			offset = log->filter_log[lsn].in_start;
 			if (log->filter_log[lsn].sel) {
@@ -636,33 +647,33 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
 		break;
 	  }
 	case PhysicalOperatorType::TABLE_SCAN: {
-	idx_t count;
-	idx_t offset;
-	data_ptr_t ptr;
-    if (lineage_manager->compress){
-		if (data_idx >= log->compressed_row_group_log.size){
-			return 0;
+		idx_t count;
+		idx_t offset;
+		data_ptr_t ptr = nullptr;
+
+		if (lineage_manager->compress){
+			if (data_idx >= log->compressed_row_group_log.size){
+				return 0;
+			}
+			count = log->compressed_row_group_log.artifacts->count[data_idx];
+			offset = log->compressed_row_group_log.artifacts->start[data_idx]
+					 + log->compressed_row_group_log.artifacts->vector_index[data_idx];
+
+			sel_t* sel_copy = ChangeBitMapToSel(log->compressed_row_group_log.artifacts, offset, data_idx);
+			ptr = reinterpret_cast<data_ptr_t>(sel_copy);
+
+		} else {
+			if (data_idx >= log->row_group_log.size()){
+				return 0;
+			}
+			count = log->row_group_log[data_idx].count;
+			offset = log->row_group_log[data_idx].start + log->row_group_log[data_idx].vector_index;
+			ptr = nullptr;
+			if (log->row_group_log[data_idx].sel) {
+				// ptr = (data_ptr_t)log->row_group_log[data_idx].sel->owned_data.get();
+				ptr = (data_ptr_t)log->row_group_log[data_idx].sel.get(); //owned_data.get();
+			}
 		}
-		count = log->compressed_row_group_log.artifacts->count[data_idx];
-		offset = log->compressed_row_group_log.artifacts->start[data_idx]
-			     + log->compressed_row_group_log.artifacts->vector_index[data_idx];
-		ptr = nullptr;
-		idx_t ptr_num = log->compressed_row_group_log.artifacts->sel[data_idx];
-		if (ptr_num) {
-			ptr = reinterpret_cast<data_ptr_t>(ptr_num);
-		}
-	} else {
-		if (data_idx >= log->row_group_log.size()){
-			return 0;
-		}
-		count = log->row_group_log[data_idx].count;
-		offset = log->row_group_log[data_idx].start + log->row_group_log[data_idx].vector_index;
-		ptr = nullptr;
-		if (log->row_group_log[data_idx].sel) {
-			// ptr = (data_ptr_t)log->row_group_log[data_idx].sel->owned_data.get();
-			ptr = (data_ptr_t)log->row_group_log[data_idx].sel.get(); //owned_data.get();
-		}
-	}
 
     chunk.SetCardinality(count);
     if (ptr != nullptr) {
