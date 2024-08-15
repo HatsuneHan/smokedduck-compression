@@ -127,9 +127,9 @@ public:
 };
 
 struct CompressedFilterArtifacts {
-	Compressed64List sel;
-	Compressed64List sel_size;
-	Compressed64List sel_is_compressed;
+	Compressed64List bitmap;
+	Compressed64List bitmap_size;
+	Compressed64List bitmap_is_compressed;
 
 	Compressed64List start_bitmap_idx;
 	Compressed64List count;
@@ -149,7 +149,7 @@ public:
 		if(artifacts != nullptr){
 			idx_t total_bitmap_num = artifacts->start_bitmap_idx[size];
 			for(size_t i = 0; i < total_bitmap_num; i++){
-				char* sel_addr = reinterpret_cast<char*>(artifacts->sel[i]);
+				char* sel_addr = reinterpret_cast<char*>(artifacts->bitmap[i]);
 				delete[] sel_addr;
 			}
 		}
@@ -162,7 +162,7 @@ public:
 		if(artifacts != nullptr){
 			idx_t total_bitmap_num = artifacts->start_bitmap_idx[size];
 			for(size_t i = 0; i < total_bitmap_num; i++){
-				char* sel_addr = reinterpret_cast<char*>(artifacts->sel[i]);
+				char* sel_addr = reinterpret_cast<char*>(artifacts->bitmap[i]);
 				delete[] sel_addr;
 			}
 		}
@@ -172,7 +172,7 @@ public:
 		size = 0;
 	}
 
-	void PushBack(const vector<idx_t>& sel_p, const vector<idx_t>& sel_size_p, const vector<idx_t>& sel_is_compressed_p, const idx_t bitmap_num_p, idx_t count_p, idx_t in_start_p, idx_t use_bitmap_p){
+	void PushBack(const vector<idx_t>& bitmap_p, const vector<idx_t>& bitmap_size_p, const vector<idx_t>& bitmap_is_compressed_p, const idx_t bitmap_num_p, idx_t count_p, idx_t in_start_p, idx_t use_bitmap_p){
 		if (size == 0) {
 			artifacts = new CompressedFilterArtifacts();
 			artifacts->start_bitmap_idx.PushBack(0, size);
@@ -181,9 +181,9 @@ public:
 		idx_t curr_total_bitmap_num = artifacts->start_bitmap_idx[size];
 
 		for(size_t i = 0; i < bitmap_num_p; i++){
-			artifacts->sel.PushBack(sel_p[i], curr_total_bitmap_num);
-			artifacts->sel_size.PushBack(sel_size_p[i], curr_total_bitmap_num);
-			artifacts->sel_is_compressed.PushBack(sel_is_compressed_p[i], curr_total_bitmap_num);
+			artifacts->bitmap.PushBack(bitmap_p[i], curr_total_bitmap_num);
+			artifacts->bitmap_size.PushBack(bitmap_size_p[i], curr_total_bitmap_num);
+			artifacts->bitmap_is_compressed.PushBack(bitmap_is_compressed_p[i], curr_total_bitmap_num);
 			curr_total_bitmap_num += 1;
 		}
 
@@ -200,9 +200,9 @@ public:
 		if(size == 0){
 			return sizeof(CompressedFilterArtifactList);
 		} else {
-			return this->artifacts->sel.GetBytesSize()
-			       + this->artifacts->sel_size.GetBytesSize()
-			       + this->artifacts->sel_is_compressed.GetBytesSize()
+			return this->artifacts->bitmap.GetBytesSize()
+			       + this->artifacts->bitmap_size.GetBytesSize()
+			       + this->artifacts->bitmap_is_compressed.GetBytesSize()
 			       + this->artifacts->start_bitmap_idx.GetBytesSize()
 			       + this->artifacts->count.GetBytesSize()
 			       + this->artifacts->in_start.GetBytesSize()

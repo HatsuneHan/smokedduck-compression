@@ -32,7 +32,7 @@ void OperatorLineage::PostProcess() {
 				  if (use_bitmap) {
 					  continue;
 				  } else {
-					  idx_t ptr_num = log[tkey]->compressed_filter_log.artifacts->sel[start_bitmap_idx];
+					  idx_t ptr_num = log[tkey]->compressed_filter_log.artifacts->bitmap[start_bitmap_idx];
 					  auto payload = reinterpret_cast<sel_t*>(ptr_num);
 					  for (idx_t j=0; j < res_count; ++j) {
 						  payload[j] += offset;

@@ -661,7 +661,7 @@ size_t LineageManager::GetCompressedArtifactSize() {
 					idx_t total_bitmap_num = curr_log->compressed_filter_log.artifacts->start_bitmap_idx[curr_log->compressed_filter_log.size];
 
 					for(size_t i = 0; i < total_bitmap_num; i++){
-						tmp_filter_log_buffer_size += curr_log->compressed_filter_log.artifacts->sel_size[i]; // sel_size
+						tmp_filter_log_buffer_size += curr_log->compressed_filter_log.artifacts->bitmap_size[i]; // sel_size
 					}
 				}
 

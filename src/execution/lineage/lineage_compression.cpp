@@ -356,9 +356,9 @@ namespace duckdb {
 
 			    for(size_t i = 0; i < bitmap_num; i++){
 
-				    unsigned char* decompressed_bitmap = DecompressBitmap(this->artifacts->sel_size[start_bitmap_idx+i],
-				                                                 this->artifacts->sel_is_compressed[start_bitmap_idx+i],
-				                                                  reinterpret_cast<unsigned char*>(this->artifacts->sel[start_bitmap_idx+i]));
+				    unsigned char* decompressed_bitmap = DecompressBitmap(this->artifacts->bitmap_size[start_bitmap_idx+i],
+				                                                 this->artifacts->bitmap_is_compressed[start_bitmap_idx+i],
+				                                                  reinterpret_cast<unsigned char*>(this->artifacts->bitmap[start_bitmap_idx+i]));
 
 				    for (size_t j = 0; j < STANDARD_VECTOR_SIZE; ++j) {
 					    if (decompressed_bitmap[j / 8] & (1 << (7 - (j % 8)))) {
@@ -369,7 +369,7 @@ namespace duckdb {
 			    return sel_copy;
 		    }
 		    else {
-			    return reinterpret_cast<sel_t*>(this->artifacts->sel[start_bitmap_idx]);
+			    return reinterpret_cast<sel_t*>(this->artifacts->bitmap[start_bitmap_idx]);
 		    }
 	    }
 
