@@ -502,7 +502,7 @@ SourceResultType PhysicalNestedLoopJoin::GetData(ExecutionContext &context, Data
 #ifdef LINEAGE
   if (lineage_manager->capture && active_log) {
     if (lineage_manager->compress){
-		vector<vector<idx_t>> result_vector = ChangeSelToBitMap(lstate.scan_state.match_sel.data(), chunk.size());
+		vector<vector<idx_t>> result_vector = ChangeSelToBitMap(lstate.scan_state.match_sel.data(), chunk.size(), CompressionMethod::LZ4);
 
 		vector<idx_t> &bitmap_vector = result_vector[0];
 		vector<idx_t> &bitmap_sizes = result_vector[1];

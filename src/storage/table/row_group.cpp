@@ -515,7 +515,7 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 
 					active_log->compressed_row_group_log.PushBack(empty_vector, empty_vector_idx_t, empty_vector_is_compressed,
 					                                              0, count, this->start, current_row, 0);
-					
+
 				} else{
 					active_log->row_group_log.push_back({nullptr, count, this->start, current_row});
 				}
@@ -568,17 +568,12 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 #ifdef LINEAGE
 			if (lineage_manager->capture && active_log) {
 				if(lineage_manager->compress){
-					vector<vector<idx_t>> result_vector = ChangeSelToBitMap(sel.data(), approved_tuple_count);
+					vector<vector<idx_t>> result_vector = ChangeSelToBitMap(sel.data(), approved_tuple_count, CompressionMethod::LZ4);
 
 					vector<idx_t> &bitmap_vector = result_vector[0];
 					vector<idx_t> &bitmap_sizes = result_vector[1];
 					vector<idx_t> &bitmap_is_compressed = result_vector[2];
 					vector<idx_t> &use_bitmap = result_vector[3];
-
-//					std::cout << "Bitmap num is " << bitmap_vector.size() << ", total count is " << approved_tuple_count << std::endl;
-//					for(size_t i = 0; i < bitmap_vector.size(); i++){
-//						std::cout << "Size of bitmap no " << i << " is " << bitmap_sizes[i] << ", is compressed " << bitmap_is_compressed[i] << ", use bitmap " << use_bitmap[i] << "\n";
-//					}
 
 					active_log->compressed_row_group_log.PushBack(bitmap_vector, bitmap_sizes, bitmap_is_compressed,
 					                                           bitmap_vector.size(), approved_tuple_count, this->start,

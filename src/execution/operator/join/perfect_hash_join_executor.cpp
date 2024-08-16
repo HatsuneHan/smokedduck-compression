@@ -87,18 +87,19 @@ bool PerfectHashJoinExecutor::FullScanHashTable(LogicalType &key_type) {
 #ifdef LINEAGE
   if (lineage_manager->capture && active_log && key_count) {
 		if (lineage_manager->compress) {
-			sel_t* sel_build_copy = new sel_t[key_count];
-			std::copy(sel_build.sel_data()->owned_data.get(), sel_build.sel_data()->owned_data.get() + key_count, sel_build_copy);
+			sel_t* sel_build_deltabitpack = ChangeSelBuildToDeltaBitpack(sel_build.sel_data()->owned_data.get(), key_count);
+			idx_t* sel_tuples_deltarle = ChangeSelTuplesToDeltaRLE(sel_tuples.sel_data()->owned_data.get(), key_count);
 
-			sel_t* sel_tuples_copy = new sel_t[key_count];
-			std::copy(sel_tuples.sel_data()->owned_data.get(), sel_tuples.sel_data()->owned_data.get() + key_count, sel_tuples_copy);
+			vector<idx_t> result_vector = CompressDataTArray(tuples_addresses.GetBuffer()->GetDataSize(), tuples_addresses.GetBuffer()->GetData(), CompressionMethod::ZSTD);
 
-			data_ptr_t tuples_addresses_copy = new data_t[tuples_addresses.GetBuffer()->GetDataSize()];
-			std::copy(tuples_addresses.GetBuffer()->GetData(), tuples_addresses.GetBuffer()->GetData() + tuples_addresses.GetBuffer()->GetDataSize(), tuples_addresses_copy);
+			unsigned char* compressed_data = reinterpret_cast<unsigned char*>(result_vector[0]);
+			idx_t compressed_size = result_vector[1];
+			idx_t is_compressed = result_vector[2];
 
-			active_log->compressed_perfect_full_scan_ht_log.PushBack(reinterpret_cast<idx_t>(sel_build_copy),
-			                                                         reinterpret_cast<idx_t>(sel_tuples_copy),
-			                                                         reinterpret_cast<idx_t>(tuples_addresses_copy),
+			active_log->compressed_perfect_full_scan_ht_log.PushBack(reinterpret_cast<idx_t>(sel_build_deltabitpack),
+			                                                         reinterpret_cast<idx_t>(sel_tuples_deltarle),
+			                                                         reinterpret_cast<idx_t>(compressed_data),
+			                                                         compressed_size, is_compressed,
 			                                                         key_count, ht.Count(),
 			                                                         tuples_addresses.GetBuffer()->GetDataSize());
 		} else {

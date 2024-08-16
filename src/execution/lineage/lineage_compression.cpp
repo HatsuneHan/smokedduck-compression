@@ -5,6 +5,9 @@
 
 #include "duckdb/execution/lineage/lineage_compression.hpp"
 
+#include "lz4.hpp"
+#include "zstd.h"
+
 namespace duckdb {
 	void Compressed64List::WriteBitsToBuffer(idx_t curr_buffer_bit_size, idx_t value){
 	    // Ensure enough space in buffer
@@ -197,7 +200,7 @@ namespace duckdb {
 	    return ReadBitsFromBuffer(index * delta_bit_size) | base;
     }
 
-    idx_t Compressed64List::GetBytesSize() {
+    size_t Compressed64List::GetBytesSize() {
 	    return sizeof(Compressed64List) + delta_buffer_size;
     }
 
@@ -214,67 +217,195 @@ namespace duckdb {
 	    delta_buffer_size = new_buffer_size;
     }
 
-    vector<idx_t> CompressBitmap(duckdb::idx_t curr_bitmap_size, unsigned char *bitmap) {
+    vector<idx_t> CompressBitmap(idx_t curr_bitmap_size, unsigned char *bitmap, CompressionMethod method) {
 
 	    idx_t bitmap_size = (STANDARD_VECTOR_SIZE + 7) / 8;
-
 	    vector<idx_t> result_vector;
 
-	    if(curr_bitmap_size <= STANDARD_VECTOR_SIZE/4 || curr_bitmap_size >= 3*STANDARD_VECTOR_SIZE/4){
-		    int max_compressed_size = duckdb_lz4::LZ4_compressBound(bitmap_size);
-		    char *compressed_bitmap = new char[max_compressed_size];
-		    int compressed_size =
-		        duckdb_lz4::LZ4_compress_fast(reinterpret_cast<const char *>(bitmap),
-		                                      compressed_bitmap, bitmap_size, max_compressed_size, 1);
-		    if (compressed_size <= 0) {
-			    throw std::runtime_error("Compression failed");
+	    if (curr_bitmap_size <= STANDARD_VECTOR_SIZE / 4 || curr_bitmap_size >= 3 * STANDARD_VECTOR_SIZE / 4) {
+		    if (method == CompressionMethod::LZ4) {
+			    // LZ4 compression
+			    int max_compressed_size = duckdb_lz4::LZ4_compressBound(bitmap_size);
+			    char *compressed_bitmap = new char[max_compressed_size];
+			    int compressed_size = duckdb_lz4::LZ4_compress_fast(reinterpret_cast<const char *>(bitmap),
+			                                            compressed_bitmap, bitmap_size, max_compressed_size, 1);
+			    if (compressed_size <= 0) {
+				    delete[] compressed_bitmap;
+				    throw std::runtime_error("LZ4 compression failed");
+			    }
+
+			    unsigned char *compressed_bitmap_copy = new unsigned char[compressed_size];
+			    std::copy(compressed_bitmap, compressed_bitmap + compressed_size, compressed_bitmap_copy);
+
+			    result_vector.push_back(reinterpret_cast<idx_t>(compressed_bitmap_copy));
+			    result_vector.push_back(compressed_size);
+			    result_vector.push_back(1); // indicates lz4 compression
+
+			    delete[] compressed_bitmap;
+			    delete[] bitmap;  // delete the original bitmap
+
+		    } else if (method == CompressionMethod::ZSTD) {
+			    // ZSTD compression
+			    size_t max_compressed_size = duckdb_zstd::ZSTD_compressBound(bitmap_size);
+			    char *compressed_bitmap = new char[max_compressed_size];
+			    size_t compressed_size = duckdb_zstd::ZSTD_compress(compressed_bitmap, max_compressed_size, bitmap, bitmap_size, 1);
+			    if (duckdb_zstd::ZSTD_isError(compressed_size)) {
+				    delete[] compressed_bitmap;
+				    throw std::runtime_error("ZSTD compression failed");
+			    }
+
+			    unsigned char *compressed_bitmap_copy = new unsigned char[compressed_size];
+			    std::copy(compressed_bitmap, compressed_bitmap + compressed_size, compressed_bitmap_copy);
+
+			    result_vector.push_back(reinterpret_cast<idx_t>(compressed_bitmap_copy));
+			    result_vector.push_back(compressed_size);
+			    result_vector.push_back(2); // indicates zstd compression
+
+			    delete[] compressed_bitmap;
+			    delete[] bitmap;  // delete the original bitmap
 		    }
 
-		    // resize bitmap
-		    unsigned char *compressed_bitmap_copy = new unsigned char[compressed_size];
-		    std::copy(compressed_bitmap, compressed_bitmap + compressed_size, compressed_bitmap_copy);
-
-		    result_vector.push_back(reinterpret_cast<idx_t>(compressed_bitmap_copy));
-		    result_vector.push_back(compressed_size);
-		    result_vector.push_back(1);
-
-		    // destruction
-		    delete[] compressed_bitmap; // delete the original compressed bitmap
-		    delete[] bitmap;            // delete the original bitmap
-
 	    } else {
-		    // no need to lz4 compress
+		    // No compression
 		    result_vector.push_back(reinterpret_cast<idx_t>(bitmap));
 		    result_vector.push_back(bitmap_size);
-		    result_vector.push_back(0);
+		    result_vector.push_back(0); // indicates no compression
 	    }
 
 	    return result_vector;
     }
 
-    unsigned char* DecompressBitmap(idx_t compressed_bitmap_size,
-                                    idx_t bitmap_is_compressed,
-                                    unsigned char *compressed_bitmap) {
+    unsigned char* DecompressBitmap(idx_t compressed_bitmap_size, idx_t bitmap_is_compressed, unsigned char *compressed_bitmap) {
 
 	    unsigned char* decompressed_bitmap;
 
-	    if(bitmap_is_compressed){
-		    // lz4 uncompress
+	    if (bitmap_is_compressed == 1) {
+		    // LZ4 decompression
 		    size_t dst_size = (STANDARD_VECTOR_SIZE + 7) / 8;
 		    char* tmp_decompressed_bitmap = new char[dst_size];
 		    size_t decompressed_size = duckdb_lz4::LZ4_decompress_safe(reinterpret_cast<char *>(compressed_bitmap), tmp_decompressed_bitmap, compressed_bitmap_size, dst_size);
 		    if (decompressed_size != dst_size) {
-			    throw std::runtime_error("Decompression failed");
+			    delete[] tmp_decompressed_bitmap;
+			    throw std::runtime_error("LZ4 decompression failed");
 		    }
 		    decompressed_bitmap = reinterpret_cast<unsigned char*>(tmp_decompressed_bitmap);
+
+	    } else if (bitmap_is_compressed == 2) {
+		    // ZSTD decompression
+		    size_t dst_size = (STANDARD_VECTOR_SIZE + 7) / 8;
+		    char* tmp_decompressed_bitmap = new char[dst_size];
+		    size_t decompressed_size = duckdb_zstd::ZSTD_decompress(tmp_decompressed_bitmap, dst_size, compressed_bitmap, compressed_bitmap_size);
+		    if (duckdb_zstd::ZSTD_isError(decompressed_size) || decompressed_size != dst_size) {
+			    delete[] tmp_decompressed_bitmap;
+			    throw std::runtime_error("ZSTD decompression failed");
+		    }
+		    decompressed_bitmap = reinterpret_cast<unsigned char*>(tmp_decompressed_bitmap);
+
 	    } else {
+		    // No decompression needed
 		    decompressed_bitmap = compressed_bitmap;
 	    }
 
 	    return decompressed_bitmap;
     }
 
-    vector<vector<idx_t>> ChangeSelToBitMap(sel_t* sel_data, idx_t result_count){
+    vector<idx_t> CompressDataTArray(idx_t array_size, data_ptr_t data, CompressionMethod method) {
+	    vector<idx_t> result_vector;
+
+	    if (array_size >= 32) {
+		    if (method == CompressionMethod::LZ4) {
+			    // LZ4 compression
+			    idx_t compressed_size = duckdb_lz4::LZ4_compressBound(array_size * sizeof(data_t));
+			    char *compressed_data = new char[compressed_size];
+			    int compressed_size_actual = duckdb_lz4::LZ4_compress_fast(
+			        reinterpret_cast<const char *>(data), compressed_data, array_size * sizeof(data_t), compressed_size, 1);
+			    if (compressed_size_actual <= 0) {
+				    delete[] compressed_data;
+				    throw std::runtime_error("LZ4 compression failed");
+			    }
+
+			    unsigned char *compressed_data_copy = new unsigned char[compressed_size_actual];
+			    std::copy(compressed_data, compressed_data + compressed_size_actual, compressed_data_copy);
+
+			    result_vector.push_back(reinterpret_cast<idx_t>(compressed_data_copy)); // (compressed) data addr
+			    result_vector.push_back(compressed_size_actual); // compressed size
+			    result_vector.push_back(1); // is compressed or not
+
+			    delete[] compressed_data;
+
+		    } else if (method == CompressionMethod::ZSTD) {
+			    // ZSTD compression
+			    size_t compressed_size = duckdb_zstd::ZSTD_compressBound(array_size * sizeof(data_t));
+			    char *compressed_data = new char[compressed_size];
+			    size_t compressed_size_actual = duckdb_zstd::ZSTD_compress(
+			        compressed_data, compressed_size, data, array_size * sizeof(data_t), 1);
+			    if (duckdb_zstd::ZSTD_isError(compressed_size_actual)) {
+				    delete[] compressed_data;
+				    throw std::runtime_error("ZSTD compression failed");
+			    }
+
+			    unsigned char *compressed_data_copy = new unsigned char[compressed_size_actual];
+			    std::copy(compressed_data, compressed_data + compressed_size_actual, compressed_data_copy);
+
+			    result_vector.push_back(reinterpret_cast<idx_t>(compressed_data_copy)); // (compressed) data addr
+			    result_vector.push_back(compressed_size_actual); // compressed size
+			    result_vector.push_back(2); // indicates zstd compression
+
+			    delete[] compressed_data;
+		    }
+	    } else {
+		    // No compression
+		    data_ptr_t data_copy = new data_t[array_size];
+		    std::copy(data, data + array_size, data_copy);
+
+		    result_vector.push_back(reinterpret_cast<idx_t>(data_copy));
+		    result_vector.push_back(array_size * sizeof(data_t));
+		    result_vector.push_back(0); // indicates no compression
+	    }
+
+	    return result_vector;
+    }
+
+    data_ptr_t DecompressDataTArray(idx_t compressed_data_size, idx_t compression_method,
+                                    unsigned char* compressed_data, idx_t array_size) {
+
+	    data_ptr_t decompressed_data;
+
+	    if (compression_method == 1) {
+		    // LZ4 decompression
+		    size_t dst_size = array_size * sizeof(data_t);
+		    char* tmp_decompressed_data = new char[dst_size];
+
+		    size_t decompressed_size = duckdb_lz4::LZ4_decompress_safe(reinterpret_cast<char *>(compressed_data), tmp_decompressed_data, compressed_data_size, dst_size);
+		    if (decompressed_size != dst_size) {
+			    delete[] tmp_decompressed_data;
+			    throw std::runtime_error("LZ4 decompression failed");
+		    }
+
+		    decompressed_data = reinterpret_cast<data_ptr_t>(tmp_decompressed_data);
+
+	    } else if (compression_method == 2) {
+		    // ZSTD decompression
+		    size_t dst_size = array_size * sizeof(data_t);
+		    char* tmp_decompressed_data = new char[dst_size];
+
+		    size_t decompressed_size = duckdb_zstd::ZSTD_decompress(tmp_decompressed_data, dst_size, compressed_data, compressed_data_size);
+		    if (duckdb_zstd::ZSTD_isError(decompressed_size) || decompressed_size != dst_size) {
+			    delete[] tmp_decompressed_data;
+			    throw std::runtime_error("ZSTD decompression failed");
+		    }
+
+		    decompressed_data = reinterpret_cast<data_ptr_t>(tmp_decompressed_data);
+
+	    } else {
+		    // No decompression needed
+		    decompressed_data = reinterpret_cast<data_ptr_t>(compressed_data);
+	    }
+
+	    return decompressed_data;
+    }
+
+    vector<vector<idx_t>> ChangeSelToBitMap(sel_t* sel_data, idx_t result_count, CompressionMethod method){
 	    vector<idx_t> bitmap_vector;
 	    vector<idx_t> bitmap_sizes;
 	    vector<idx_t> bitmap_is_compressed;
@@ -303,7 +434,7 @@ namespace duckdb {
 				    // here we finish the current bitmap
 				    // compress the bitmap
 
-					vector<idx_t> result_vector = CompressBitmap(curr_bitmap_size, bitmap);
+					vector<idx_t> result_vector = CompressBitmap(curr_bitmap_size, bitmap, method);
 				    bitmap_vector.push_back(result_vector[0]);
 				    bitmap_sizes.push_back(result_vector[1]);
 				    bitmap_is_compressed.push_back(result_vector[2]);
@@ -320,7 +451,7 @@ namespace duckdb {
 		    }
 
 		    // compress the last bitmap
-		    vector<idx_t> result_vector = CompressBitmap(curr_bitmap_size, bitmap);
+		    vector<idx_t> result_vector = CompressBitmap(curr_bitmap_size, bitmap, method);
 
 		    bitmap_vector.push_back(result_vector[0]);
 		    bitmap_sizes.push_back(result_vector[1]);
@@ -380,7 +511,184 @@ namespace duckdb {
 
     }
 
+    // because rle number may be idx_t, we need to use idx_t*
+	idx_t* ChangeSelTuplesToDeltaRLE(sel_t* sel_data, idx_t key_count){
 
+		if(key_count <= 8){
+		    sel_t* sel_data_copy = new sel_t[key_count];
+		    std::copy(sel_data, sel_data + key_count, sel_data_copy);
+		    return reinterpret_cast<idx_t*>(sel_data_copy);
+	    }
+
+		vector<idx_t> delta_rle_vector;
+
+		// we should store the first element
+	    delta_rle_vector.push_back(sel_data[0]);
+
+	    if(sel_data[1] <= sel_data[0]){
+		    throw std::runtime_error("sel_data should be in ascending order");
+	    }
+	    idx_t prev_delta = sel_data[1] - sel_data[0];
+
+	    idx_t curr_rle = 1;
+
+	    for(size_t i = 2; i < key_count; i++) {
+		    // we should guarantee sel_data should in ascending order
+		    // and it is true for sel_tuples
+		    if(sel_data[i] <= sel_data[i-1]){
+			    throw std::runtime_error("sel_data should be in ascending order");
+		    }
+
+		    idx_t delta = sel_data[i] - sel_data[i - 1];
+		    if (delta == prev_delta) {
+			    curr_rle++;
+		    } else {
+			    delta_rle_vector.push_back(prev_delta);
+			    delta_rle_vector.push_back(curr_rle);
+
+			    prev_delta = delta;
+			    curr_rle = 1;
+		    }
+	    }
+
+	    delta_rle_vector.push_back(prev_delta);
+	    delta_rle_vector.push_back(curr_rle);
+
+	    idx_t *delta_rle = new idx_t[delta_rle_vector.size()];
+	    std::copy(delta_rle_vector.begin(), delta_rle_vector.end(), delta_rle);
+
+		return delta_rle;
+    }
+
+    sel_t* ChangeDeltaRLEToSelTuples(idx_t* delta_rle, idx_t key_count){
+
+	    if(key_count <= 8){
+		    return reinterpret_cast<sel_t*>(delta_rle);
+	    }
+
+	    sel_t* sel_data = new sel_t[key_count];
+	    sel_data[0] = delta_rle[0];
+
+	    idx_t index = 1;
+	    idx_t delta_rle_index = 1;
+
+	    while(index < key_count){
+		    idx_t delta = delta_rle[delta_rle_index];
+		    idx_t rle = delta_rle[delta_rle_index+1];
+
+		    for(size_t i = 0; i < rle; i++){
+			    sel_data[index] = sel_data[index-1] + delta;
+			    index++;
+		    }
+
+		    delta_rle_index += 2;
+	    }
+
+	    return sel_data;
+	}
+
+    size_t GetDeltaRLESize(idx_t* delta_rle, idx_t key_count){
+	    if(key_count <= 8){
+		    return sizeof(sel_t) * key_count;
+	    } else {
+		    sel_t* sel_data = new sel_t[key_count];
+		    sel_data[0] = delta_rle[0];
+
+		    idx_t index = 1;
+		    idx_t delta_rle_index = 1;
+
+		    while(index < key_count){
+			    idx_t delta = delta_rle[delta_rle_index];
+			    idx_t rle = delta_rle[delta_rle_index+1];
+
+			    for(size_t i = 0; i < rle; i++){
+				    sel_data[index] = sel_data[index-1] + delta;
+				    index++;
+			    }
+
+			    delta_rle_index += 2;
+		    }
+			delete[] sel_data;
+
+		    return sizeof(idx_t) * delta_rle_index;
+	    }
+
+	}
+
+    sel_t* ChangeSelBuildToDeltaBitpack(sel_t* sel_data, idx_t key_count) {
+
+	    if(key_count <= 8){
+		    sel_t* sel_data_copy = new sel_t[key_count];
+		    std::copy(sel_data, sel_data + key_count, sel_data_copy);
+
+		    return sel_data_copy;
+	    }
+
+	    Compressed64ListWithSize* compressed_list = new Compressed64ListWithSize();
+	    compressed_list->PushBack(sel_data[0]);
+
+	    for(size_t i = 1; i < key_count; i++){
+		    if(sel_data[i] <= sel_data[i-1]){
+			    // actually no possibility of equal for sel_buildn
+
+			    // use 0 to represent the next ascending piece
+			    compressed_list->PushBack(0);
+			    // directly store the data as the start of the ascending piece
+			    compressed_list->PushBack(sel_data[i]);
+		    } else {
+			    // store delta
+			    idx_t delta = sel_data[i] - sel_data[i-1];
+			    compressed_list->PushBack(delta);
+		    }
+	    }
+
+	    // the array looks like
+	    // start_1 delta_11 delta_12 ... delta_1n 0 start_2 delta_21 delta_22 ... delta_2n 0 start_3 delta_31 ...
+	    // compress list is used to bitpack the delta, because delta is much smaller than the original data
+	    // of course, the start is usually small because the piece ascends
+
+		return reinterpret_cast<sel_t*>(compressed_list);
+    }
+
+    sel_t* ChangeDeltaBitpackToSelBuild(sel_t* delta_bitpack, idx_t key_count) {
+
+	    if(key_count <= 8){
+		    return delta_bitpack;
+	    }
+
+	    Compressed64ListWithSize* compressed_list = reinterpret_cast<Compressed64ListWithSize*>(delta_bitpack);
+
+	    sel_t* sel_data = new sel_t[key_count];
+	    sel_data[0] = compressed_list->Get(0);
+
+	    idx_t index = 1;
+	    idx_t delta_index = 1;
+
+	    while(index < key_count){
+		    idx_t delta = compressed_list->Get(delta_index);
+		    if(delta == 0){
+			    // the next ascending piece
+			    delta_index++;
+			    sel_data[index] = compressed_list->Get(delta_index);
+		    } else {
+			    sel_data[index] = sel_data[index-1] + delta;
+		    }
+
+		    index++;
+		    delta_index++;
+	    }
+
+	    return sel_data;
+	}
+
+    size_t GetDeltaBitpackSize(sel_t* delta_bitpack, idx_t key_count) {
+	    if(key_count <= 8){
+		    return sizeof(sel_t) * key_count;
+	    } else {
+		    Compressed64ListWithSize* compressed_list = reinterpret_cast<Compressed64ListWithSize*>(delta_bitpack);
+		    return compressed_list->GetBytesSize();
+	    }
+    }
 }
 
 #endif

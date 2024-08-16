@@ -702,13 +702,21 @@ size_t LineageManager::GetCompressedArtifactSize() {
 
 				for(size_t i = 0; i < curr_log->compressed_perfect_full_scan_ht_log.size; i++){
 					if(curr_log->compressed_perfect_full_scan_ht_log.artifacts->sel_build[i] != 0){
-						tmp_perfect_full_scan_ht_log_buffer_size += sizeof(sel_t) * curr_log->compressed_perfect_full_scan_ht_log.artifacts->key_count[i]; // sel_build
+						tmp_perfect_full_scan_ht_log_buffer_size += GetDeltaBitpackSize(reinterpret_cast<sel_t*>(curr_log->compressed_perfect_full_scan_ht_log.artifacts->sel_build[i]),
+						                                                                curr_log->compressed_perfect_full_scan_ht_log.artifacts->key_count[i]); // sel_build
 					}
+
 					if(curr_log->compressed_perfect_full_scan_ht_log.artifacts->sel_tuples[i] != 0){
-						tmp_perfect_full_scan_ht_log_buffer_size += sizeof(sel_t) * curr_log->compressed_perfect_full_scan_ht_log.artifacts->key_count[i]; // sel_tuples
+						tmp_perfect_full_scan_ht_log_buffer_size += GetDeltaRLESize(reinterpret_cast<idx_t*>(curr_log->compressed_perfect_full_scan_ht_log.artifacts->sel_tuples[i]),
+						                                                            curr_log->compressed_perfect_full_scan_ht_log.artifacts->key_count[i]); // sel_tuples
 					}
-					if(curr_log->compressed_perfect_full_scan_ht_log.artifacts->row_locations[i] != 0){
-						tmp_perfect_full_scan_ht_log_buffer_size += sizeof(data_t) * curr_log->compressed_perfect_full_scan_ht_log.artifacts->vector_buffer_size[i]; // row_locations
+
+					if(curr_log->compressed_perfect_full_scan_ht_log.artifacts->compressed_row_locations[i] != 0){
+						if(curr_log->compressed_perfect_full_scan_ht_log.artifacts->row_locations_is_compressed[i] == 0){
+							tmp_perfect_full_scan_ht_log_buffer_size += sizeof(data_t) * curr_log->compressed_perfect_full_scan_ht_log.artifacts->vector_buffer_size[i]; // row_locations
+						} else {
+							tmp_perfect_full_scan_ht_log_buffer_size += sizeof(unsigned char) * curr_log->compressed_perfect_full_scan_ht_log.artifacts->compressed_row_locations_size[i]; // row_locations
+						}
 					}
 				}
 

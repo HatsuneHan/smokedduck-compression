@@ -2,8 +2,6 @@
 
 #include "duckdb/execution/lineage/operator_lineage.hpp"
 
-#include "lz4.hpp"
-
 namespace duckdb {
 
 void OperatorLineage::PostProcess() {
@@ -296,14 +294,20 @@ void OperatorLineage::PostProcess() {
 		  for (size_t k = 0; k < log[tkey]->compressed_perfect_full_scan_ht_log.size; k++) {
 			  idx_t key_count = log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->key_count[k];
 			  idx_t ht_count = log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->ht_count[k];
-			  data_ptr_t* ptr = reinterpret_cast<data_ptr_t*>(log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->row_locations[k]);
+			  data_ptr_t* ptr = reinterpret_cast<data_ptr_t*>(
+				  DecompressDataTArray(log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->compressed_row_locations_size[k],
+					                   log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->row_locations_is_compressed[k],
+					                   reinterpret_cast<data_ptr_t>(log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->compressed_row_locations[k]),
+					                   log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->vector_buffer_size[k]));
+
+			  sel_t* sel_build_decode = ChangeDeltaBitpackToSelBuild(reinterpret_cast<sel_t*>(log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->sel_build[k]), key_count);
+			  sel_t* sel_tuples_decode = ChangeDeltaRLEToSelTuples(reinterpret_cast<idx_t*>(log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->sel_tuples[k]), key_count);
 
 			  for (idx_t e=0; e < key_count; e++) {
-				  idx_t build_idx = reinterpret_cast<sel_t*>(log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->sel_build[k])[e];
-				  idx_t tuples_idx = reinterpret_cast<sel_t*>(log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->sel_tuples[k])[e];
+				  idx_t build_idx = sel_build_decode[e];
+				  idx_t tuples_idx = sel_tuples_decode[e];
 				  // TODO: check if this is correct. follow old implementation
 				  log_index->perfect_codes[build_idx] = log_index->codes[ptr[tuples_idx]];
-
 			  }
 		  }
 
