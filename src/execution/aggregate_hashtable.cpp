@@ -254,9 +254,18 @@ idx_t GroupedAggregateHashTable::AddChunk(DataChunk &groups, Vector &group_hashe
   if (lineage_manager->capture && active_log) {
 	  	auto ptrs = FlatVector::GetData<data_ptr_t>(state.addresses);
 		if (lineage_manager->compress){
-			data_ptr_t* addresses_copy = new data_ptr_t[groups.size()];
-			std::copy(ptrs, ptrs + groups.size() , addresses_copy);
-			active_log->compressed_scatter_log.PushBack(reinterpret_cast<idx_t>(addresses_copy), groups.size());
+
+			bool is_ascend = true;
+			for (idx_t i = 1; i < groups.size(); i++) {
+				if (reinterpret_cast<idx_t>(ptrs[i]) < reinterpret_cast<idx_t>(ptrs[i - 1])) {
+					is_ascend = false;
+					break;
+				}
+			}
+
+			data_ptr_t* addresses_compressed = ChangeAddressToBitpack(ptrs, groups.size(), is_ascend);
+			active_log->compressed_scatter_log.PushBack(reinterpret_cast<idx_t>(addresses_compressed), static_cast<idx_t>(is_ascend), groups.size());
+
 		} else {
 			unique_ptr<data_ptr_t[]> addresses_copy(new data_ptr_t[groups.size()]);
 			std::copy(ptrs, ptrs + groups.size() , addresses_copy.get());

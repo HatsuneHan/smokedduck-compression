@@ -146,9 +146,18 @@ void RowOperations::FinalizeStates(RowOperationsState &state, TupleDataLayout &l
 	if (lineage_manager->capture && active_log) {
 		auto ptrs = FlatVector::GetData<data_ptr_t>(addresses);
 		if (lineage_manager->compress){
-			data_ptr_t* addresses_copy_lineage = new data_ptr_t[result.size()];
-			std::copy(ptrs, ptrs + result.size() , addresses_copy_lineage);
-			active_log->compressed_finalize_states_log.PushBack(reinterpret_cast<idx_t>(addresses_copy_lineage), result.size());
+
+			bool is_ascend = true;
+			for (idx_t i = 1; i < result.size(); i++) {
+				if (reinterpret_cast<idx_t>(ptrs[i]) < reinterpret_cast<idx_t>(ptrs[i - 1])) {
+					is_ascend = false;
+					break;
+				}
+			}
+
+			data_ptr_t* addresses_compressed = ChangeAddressToBitpack(ptrs, result.size(), is_ascend);
+			active_log->compressed_finalize_states_log.PushBack(reinterpret_cast<idx_t>(addresses_compressed), static_cast<idx_t>(is_ascend), result.size());
+
 		} else {
 			unique_ptr<data_ptr_t[]> addresses_copy_lineage(new data_ptr_t[result.size()]);
 			std::copy(ptrs, ptrs + result.size() , addresses_copy_lineage.get());

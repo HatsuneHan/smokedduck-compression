@@ -756,9 +756,9 @@ size_t LineageManager::GetCompressedArtifactSize() {
 				// right bitpack
 				for(size_t i = 0; i < curr_log->compressed_perfect_probe_ht_log.size; i++){
 					if(curr_log->compressed_perfect_probe_ht_log.artifacts->right[i] != 0){
-						tmp_perfect_probe_ht_log_buffer_size += GetBitpackSize(reinterpret_cast<sel_t*>(curr_log->compressed_perfect_probe_ht_log.artifacts->right[i]),
+						tmp_perfect_probe_ht_log_buffer_size += GetSelBitpackSize(reinterpret_cast<sel_t*>(curr_log->compressed_perfect_probe_ht_log.artifacts->right[i]),
 						                                                                curr_log->compressed_perfect_probe_ht_log.artifacts->count[i]); // right
-						tmp += GetBitpackSize(reinterpret_cast<sel_t*>(curr_log->compressed_perfect_probe_ht_log.artifacts->right[i]),
+						tmp += GetSelBitpackSize(reinterpret_cast<sel_t*>(curr_log->compressed_perfect_probe_ht_log.artifacts->right[i]),
 						                      curr_log->compressed_perfect_probe_ht_log.artifacts->count[i]);
 					}
 				}
@@ -807,7 +807,10 @@ size_t LineageManager::GetCompressedArtifactSize() {
 
 				for(size_t i = 0; i < curr_log->compressed_scatter_log.size; i++){
 					if(curr_log->compressed_scatter_log.artifacts->addresses[i] != 0){
-						tmp_scatter_log_buffer_size += sizeof(data_ptr_t) * curr_log->compressed_scatter_log.artifacts->count[i]; // addresses
+						tmp_scatter_log_buffer_size += GetAddressBitpackSize(
+						    reinterpret_cast<data_ptr_t*>(curr_log->compressed_scatter_log.artifacts->addresses[i]),
+						    curr_log->compressed_scatter_log.artifacts->count[i],
+						    static_cast<bool>(curr_log->compressed_scatter_log.artifacts->is_ascend[i]));
 					}
 				}
 
@@ -905,7 +908,10 @@ size_t LineageManager::GetCompressedArtifactSize() {
 
 				for(size_t i = 0; i < curr_log->compressed_finalize_states_log.size; i++){
 					if(curr_log->compressed_finalize_states_log.artifacts->addresses[i] != 0){
-						tmp_finalize_states_log_buffer_size += sizeof(data_ptr_t) * curr_log->compressed_finalize_states_log.artifacts->count[i]; // addresses
+						tmp_finalize_states_log_buffer_size += GetAddressBitpackSize(
+						    reinterpret_cast<data_ptr_t*>(curr_log->compressed_finalize_states_log.artifacts->addresses[i]),
+						    curr_log->compressed_finalize_states_log.artifacts->count[i],
+						    static_cast<bool>(curr_log->compressed_finalize_states_log.artifacts->is_ascend[i]));
 					}
 				}
 

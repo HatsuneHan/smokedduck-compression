@@ -123,7 +123,11 @@ void OperatorLineage::PostProcess() {
 		  for (size_t k=0; k < log[tkey]->compressed_finalize_states_log.size; ++k) {
 			  idx_t res_count = log[tkey]->compressed_finalize_states_log.artifacts->count[k];
 			  // std::cout << count_so_far+res_count << " finalize states: " << tkey << " " << log[tkey]->finalize_states_log.size() << std::endl;
-			  auto payload = reinterpret_cast<data_ptr_t*>(log[tkey]->compressed_finalize_states_log.artifacts->addresses[k]);
+
+			  data_ptr_t* compressed_payload = reinterpret_cast<data_ptr_t*>(log[tkey]->compressed_finalize_states_log.artifacts->addresses[k]);
+			  bool is_ascend = static_cast<bool>(log[tkey]->compressed_finalize_states_log.artifacts->is_ascend[k]);
+			  data_ptr_t* payload = ChangeBitpackToAddress(compressed_payload, res_count, is_ascend);
+
 			  for (idx_t j=0; j < res_count; ++j) {
 				  if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
 					  log_index->codes[payload[j]] = j + count_so_far;
@@ -132,6 +136,11 @@ void OperatorLineage::PostProcess() {
 				  }
 			  }
 			  count_so_far += res_count;
+
+			  if(res_count >= 4){
+				  delete[] payload;
+			  }
+
 		  }
 		  log[tkey]->compressed_finalize_states_log.Clear();
 
@@ -648,11 +657,6 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
 			sel_t* sel_copy = ChangeBitMapToSel(log->compressed_filter_log.artifacts, offset, lsn);
 			ptr = reinterpret_cast<data_ptr_t>(sel_copy);
 
-			// we store the sel_copy, so we can free the log
-			if(log->compressed_filter_log.artifacts->use_bitmap[lsn]){
-				log->compressed_filter_log.Clear();
-			}
-
 		} else {
 			if (data_idx >= log->filter_log.size()){
 				return 0;
@@ -692,10 +696,6 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
 
 			sel_t* sel_copy = ChangeBitMapToSel(log->compressed_row_group_log.artifacts, offset, data_idx);
 			ptr = reinterpret_cast<data_ptr_t>(sel_copy);
-
-			if(log->compressed_row_group_log.artifacts->use_bitmap[data_idx]){
-				log->compressed_row_group_log.Clear();
-			}
 
 		} else {
 			if (data_idx >= log->row_group_log.size()){
@@ -887,7 +887,10 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
 				return 0;
 			}
 			count = log->compressed_scatter_log.artifacts->count[data_idx];
-			payload = reinterpret_cast<data_ptr_t*>(log->compressed_scatter_log.artifacts->addresses[data_idx]);
+			data_ptr_t* compressed_payload = reinterpret_cast<data_ptr_t*>(log->compressed_scatter_log.artifacts->addresses[data_idx]);
+			bool is_ascend = static_cast<bool>(log->compressed_scatter_log.artifacts->is_ascend[data_idx]);
+			payload = ChangeBitpackToAddress(compressed_payload, count, is_ascend);
+
 		} else {
 			if (data_idx >= log->scatter_log.size()){
 				return 0;
@@ -905,7 +908,14 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
 		chunk.data[0].Sequence(global_count, 1, count); // in_index
 		chunk.data[2].Reference(thread_id_vec);
 		chunk.data[3].Reference(thread_id_vec);
-			break;
+
+		if(lineage_manager->compress){
+			if(count >= 4){
+				delete[] payload;
+			}
+		}
+
+		break;
 		}
 	case PhysicalOperatorType::ORDER_BY: {
     if (log_index->offset >= log_index->vals.size()) return 0;
