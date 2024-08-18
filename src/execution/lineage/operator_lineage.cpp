@@ -300,8 +300,8 @@ void OperatorLineage::PostProcess() {
 					                   reinterpret_cast<data_ptr_t>(log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->compressed_row_locations[k]),
 					                   log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->vector_buffer_size[k]));
 
-			  sel_t* sel_build_decode = ChangeDeltaBitpackToSelBuild(reinterpret_cast<sel_t*>(log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->sel_build[k]), key_count);
-			  sel_t* sel_tuples_decode = ChangeDeltaRLEToSelTuples(reinterpret_cast<idx_t*>(log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->sel_tuples[k]), key_count);
+			  sel_t* sel_build_decode = ChangeDeltaBitpackToSelData(reinterpret_cast<sel_t*>(log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->sel_build[k]), key_count);
+			  sel_t* sel_tuples_decode = ChangeDeltaRLEToSelData(reinterpret_cast<idx_t*>(log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->sel_tuples[k]), key_count);
 
 			  for (idx_t e=0; e < key_count; e++) {
 				  idx_t build_idx = sel_build_decode[e];
@@ -344,9 +344,12 @@ void OperatorLineage::PostProcess() {
 
 			  idx_t count = log[tkey]->compressed_perfect_probe_ht_log.artifacts->count[lsn];
 			  idx_t in_start = log[tkey]->compressed_perfect_probe_ht_log.artifacts->in_start[lsn];
+			  idx_t use_bitmap = log[tkey]->compressed_perfect_probe_ht_log.artifacts->use_bitmap[lsn];
 
-			  auto left = reinterpret_cast<sel_t*>(log[tkey]->compressed_perfect_probe_ht_log.artifacts->left[lsn]);
-			  auto right = reinterpret_cast<sel_t*>(log[tkey]->compressed_perfect_probe_ht_log.artifacts->right[lsn]);
+			  sel_t* left = ChangeBitMapToSel(log[tkey]->compressed_perfect_probe_ht_log.artifacts, 0, lsn);
+
+			  sel_t* compressed_right = reinterpret_cast<sel_t*>(log[tkey]->compressed_perfect_probe_ht_log.artifacts->right[lsn]);
+			  sel_t* right = ChangeBitpackToSelData(compressed_right, count);
 
 			  if (left == nullptr) {
 				  for (idx_t j=0; j < count; ++j) {
@@ -360,8 +363,17 @@ void OperatorLineage::PostProcess() {
 				  }
 			  }
 			  count_so_far += count;
+
+//			  if(use_bitmap){
+//				  delete[] left;
+//			  }
+//			  if(count >= 30){
+//				  delete[] right;
+//			  }
+
 		  }
 		  log[tkey]->compressed_perfect_probe_ht_log.Clear();
+
 	  } else {
 		  if (log.count(tkey) == 0 || log[tkey]->perfect_probe_ht_log.empty()){
 			  continue;
@@ -625,6 +637,9 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
 
 			sel_t* sel_copy = ChangeBitMapToSel(log->compressed_filter_log.artifacts, offset, lsn);
 			ptr = reinterpret_cast<data_ptr_t>(sel_copy);
+
+			// we store the sel_copy, so we can free the log
+//			log->compressed_filter_log.Clear();
 
 		} else {
 			if (data_idx >= log->filter_log.size()){

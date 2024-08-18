@@ -14,9 +14,12 @@
 
 #include <iostream>
 
+#include <zstd.h>
+
 namespace duckdb{
 
 class Compressed64List;
+class Compressed64ListWithSize;
 class CompressedScanArtifactList;
 class CompressedFilterArtifactList;
 class CompressedAddressArtifactList;
@@ -47,19 +50,17 @@ vector<vector<idx_t>> ChangeSelToBitMap(sel_t*, idx_t, CompressionMethod);
 template<typename ARTIFACT_TYPE>
 sel_t* ChangeBitMapToSel(const ARTIFACT_TYPE&, idx_t, idx_t);
 
-idx_t* ChangeSelTuplesToDeltaRLE(sel_t*, idx_t);
-sel_t* ChangeDeltaRLEToSelTuples(idx_t*, idx_t);
+idx_t* ChangeSelDataToDeltaRLE(sel_t*, idx_t);
+sel_t* ChangeDeltaRLEToSelData(idx_t*, idx_t);
 size_t GetDeltaRLESize(idx_t*, idx_t);
 
-sel_t* ChangeSelBuildToDeltaBitpack(sel_t*, idx_t);
-sel_t* ChangeDeltaBitpackToSelBuild(sel_t*, idx_t);
+sel_t* ChangeSelDataToDeltaBitpack(sel_t*, idx_t);
+sel_t* ChangeDeltaBitpackToSelData(sel_t*, idx_t);
 size_t GetDeltaBitpackSize(sel_t*, idx_t);
 
-
-
-
-
-
+sel_t* ChangeSelDataToBitpack(sel_t*, idx_t);
+sel_t* ChangeBitpackToSelData(sel_t*, idx_t);
+size_t GetBitpackSize(sel_t*, idx_t);
 // use to replace vector<idx_t>
 
 class Compressed64List{
@@ -91,6 +92,48 @@ public:
 
 	explicit Compressed64ListWithSize() : size(0) {};
 	~Compressed64ListWithSize() override = default;
+
+	Compressed64ListWithSize(sel_t* sel_data, idx_t count) : Compressed64List(), size(0) {
+		idx_t sel_start = static_cast<idx_t>(sel_data[0]);
+		base = sel_start & ~0x1ull;
+		delta_bit_size = static_cast<data_t>(1);
+
+		delta_buffer_size = 0;
+		delta_buffer = nullptr;
+
+		for (idx_t i = 1; i < count; i++) {
+			idx_t sel = static_cast<idx_t>(sel_data[i]);
+
+			idx_t check_addr_with_base = (sel ^ base) >> delta_bit_size;
+			bool base_addr_is_usable = !check_addr_with_base;
+
+			if (base_addr_is_usable){
+				continue;
+			} else {
+				data_t reduced_bit_size = 0;
+				while (check_addr_with_base) {
+					check_addr_with_base >>= 1;
+					reduced_bit_size++;
+				}
+
+				delta_bit_size = delta_bit_size + reduced_bit_size;
+				base = sel & ~((1ull << (delta_bit_size)) - 1);
+			}
+		}
+
+		delta_buffer_size = (delta_bit_size * count + 7) / 8;
+		delta_buffer = new unsigned char[delta_buffer_size];
+		std::memset(delta_buffer, 0, delta_buffer_size);
+
+		idx_t delta_addr_bitmask = delta_bit_size == 64 ? ~0ull : ((1ull << delta_bit_size) - 1);
+
+		for (idx_t i = 0; i < count; i++) {
+			idx_t sel = static_cast<idx_t>(sel_data[i]);
+			WriteBitsToBuffer(i * delta_bit_size, sel & delta_addr_bitmask);
+		}
+
+		size = count;
+	}
 
 	void PushBack(idx_t sel) {
 		Compressed64List::PushBack(sel, size);
@@ -596,10 +639,18 @@ public:
 };
 
 struct CompressedPerfectJoinArtifacts{
-	Compressed64List left;
+	// bitmap for left
+	Compressed64List bitmap;
+	Compressed64List bitmap_size;
+	Compressed64List bitmap_is_compressed;
+	Compressed64List start_bitmap_idx;
+
+	// bitpack for right
 	Compressed64List right;
+
 	Compressed64List count;
 	Compressed64List in_start;
+	Compressed64List use_bitmap;
 };
 
 class CompressedPerfectJoinArtifactList{
@@ -610,36 +661,92 @@ public:
 
 	// Destructor
 	~CompressedPerfectJoinArtifactList() {
-		for (size_t i = 0; i < size; i++) {
-			sel_t* left_addr = reinterpret_cast<sel_t*>(artifacts->left[i]);
-			sel_t* right_addr = reinterpret_cast<sel_t*>(artifacts->right[i]);
-			delete[] left_addr;
-			delete[] right_addr;
+		if(artifacts != nullptr){
+			for(size_t i = 0; i < size; i++){
+				idx_t start_bitmap_idx = artifacts->start_bitmap_idx[i];
+				idx_t bitmap_num = artifacts->start_bitmap_idx[i + 1] - start_bitmap_idx;
+
+				for(size_t j = 0; j < bitmap_num; j++){
+					if(artifacts->count[i] >= 32){
+						unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[start_bitmap_idx + j]);
+						delete[] sel_addr;
+					} else {
+						sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx + j]);
+						delete[] sel_addr;
+					}
+				}
+			}
+
+			for (size_t i = 0; i < size; i++) {
+				if(artifacts->count[i] < 30){
+					sel_t* right_addr = reinterpret_cast<sel_t*>(artifacts->right[i]);
+					delete[] right_addr;
+				} else {
+					Compressed64ListWithSize* right_addr = reinterpret_cast<Compressed64ListWithSize*>(artifacts->right[i]);
+					delete right_addr;
+				}
+			}
 		}
+
 		delete artifacts;
 	}
 
 	void Clear(){
-		for (size_t i = 0; i < size; i++) {
-			sel_t* left_addr = reinterpret_cast<sel_t*>(artifacts->left[i]);
-			sel_t* right_addr = reinterpret_cast<sel_t*>(artifacts->right[i]);
-			delete[] left_addr;
-			delete[] right_addr;
+		if(artifacts != nullptr){
+			for(size_t i = 0; i < size; i++){
+				idx_t start_bitmap_idx = artifacts->start_bitmap_idx[i];
+				idx_t bitmap_num = artifacts->start_bitmap_idx[i + 1] - start_bitmap_idx;
+
+				for(size_t j = 0; j < bitmap_num; j++){
+					if(artifacts->count[i] >= 32){
+						unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[start_bitmap_idx + j]);
+						delete[] sel_addr;
+					} else {
+						sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx + j]);
+						delete[] sel_addr;
+					}
+				}
+			}
+
+			for (size_t i = 0; i < size; i++) {
+				if(artifacts->count[i] < 30){
+					sel_t* right_addr = reinterpret_cast<sel_t*>(artifacts->right[i]);
+					delete[] right_addr;
+				} else {
+					Compressed64ListWithSize* right_addr = reinterpret_cast<Compressed64ListWithSize*>(artifacts->right[i]);
+					delete right_addr;
+				}
+			}
 		}
+
 		delete artifacts;
 		artifacts = nullptr;
 		size = 0;
 	}
 
-	void PushBack(idx_t left_p, idx_t right_p, idx_t count_p, idx_t in_start_p){
+	void PushBack(const vector<idx_t>& bitmap_p, const vector<idx_t>& bitmap_size_p,
+	              const vector<idx_t>& bitmap_is_compressed_p, const idx_t bitmap_num_p,
+	              idx_t right_p, idx_t count_p, idx_t in_start_p, idx_t use_bitmap_p){
+
 		if (size == 0) {
 			artifacts = new CompressedPerfectJoinArtifacts();
+			artifacts->start_bitmap_idx.PushBack(0, size);
 		}
 
-		this->artifacts->left.PushBack(left_p, size);
-		this->artifacts->right.PushBack(right_p, size);
-		this->artifacts->count.PushBack(count_p, size);
-		this->artifacts->in_start.PushBack(in_start_p, size);
+		idx_t curr_total_bitmap_num = artifacts->start_bitmap_idx[size];
+		for(size_t i = 0; i < bitmap_num_p; i++){
+			artifacts->bitmap.PushBack(bitmap_p[i], curr_total_bitmap_num);
+			artifacts->bitmap_size.PushBack(bitmap_size_p[i], curr_total_bitmap_num);
+			artifacts->bitmap_is_compressed.PushBack(bitmap_is_compressed_p[i], curr_total_bitmap_num);
+			curr_total_bitmap_num += 1;
+		}
+		artifacts->start_bitmap_idx.PushBack(curr_total_bitmap_num, size + 1);
+
+		artifacts->right.PushBack(right_p, size);
+		artifacts->count.PushBack(count_p, size);
+		artifacts->in_start.PushBack(in_start_p, size);
+
+		artifacts->use_bitmap.PushBack(use_bitmap_p, size);
 
 		size++;
 	}
@@ -648,10 +755,14 @@ public:
 		if(size == 0){
 			return sizeof(CompressedPerfectJoinArtifactList);
 		} else {
-			return this->artifacts->left.GetBytesSize()
+			return this->artifacts->bitmap.GetBytesSize()
+			       + this->artifacts->bitmap_size.GetBytesSize()
+			       + this->artifacts->bitmap_is_compressed.GetBytesSize()
+			       + this->artifacts->start_bitmap_idx.GetBytesSize()
 			       + this->artifacts->right.GetBytesSize()
 			       + this->artifacts->count.GetBytesSize()
 			       + this->artifacts->in_start.GetBytesSize()
+			       + this->artifacts->use_bitmap.GetBytesSize()
 			       + sizeof(CompressedPerfectJoinArtifactList);
 		}
 	}

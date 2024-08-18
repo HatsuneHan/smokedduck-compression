@@ -87,8 +87,8 @@ bool PerfectHashJoinExecutor::FullScanHashTable(LogicalType &key_type) {
 #ifdef LINEAGE
   if (lineage_manager->capture && active_log && key_count) {
 		if (lineage_manager->compress) {
-			sel_t* sel_build_deltabitpack = ChangeSelBuildToDeltaBitpack(sel_build.sel_data()->owned_data.get(), key_count);
-			idx_t* sel_tuples_deltarle = ChangeSelTuplesToDeltaRLE(sel_tuples.sel_data()->owned_data.get(), key_count);
+			sel_t* sel_build_deltabitpack = ChangeSelDataToDeltaBitpack(sel_build.sel_data()->owned_data.get(), key_count);
+			idx_t* sel_tuples_deltarle = ChangeSelDataToDeltaRLE(sel_tuples.sel_data()->owned_data.get(), key_count);
 
 			vector<idx_t> result_vector = CompressDataTArray(tuples_addresses.GetBuffer()->GetDataSize(), tuples_addresses.GetBuffer()->GetData(), CompressionMethod::ZSTD);
 
@@ -225,19 +225,28 @@ OperatorResultType PerfectHashJoinExecutor::ProbePerfectHashTable(ExecutionConte
 #ifdef LINEAGE
   if (lineage_manager->capture && active_log && probe_sel_count) {
 	  if (lineage_manager->compress){
-		  sel_t* right = new sel_t[probe_sel_count];
-		  std::copy(state.build_sel_vec.data(), state.build_sel_vec.data() + probe_sel_count, right);
 
-		  sel_t* left = nullptr;
+		  sel_t* compressed_right = ChangeSelDataToBitpack(state.build_sel_vec.data(), probe_sel_count);
+
+		  vector<vector<idx_t>> left_result_vector;
+		  vector<idx_t> bitmap_vector;
+		  vector<idx_t> bitmap_sizes;
+		  vector<idx_t> bitmap_is_compressed;
+		  idx_t use_bitmap = 0;
+
 		  if (probe_sel_count < STANDARD_VECTOR_SIZE) {
-			  left = new sel_t[probe_sel_count];
-			  std::copy(state.probe_sel_vec.data(), state.probe_sel_vec.data() + probe_sel_count, left);
+			  // for left, use bitmap
+			  left_result_vector = ChangeSelToBitMap(state.probe_sel_vec.data(), probe_sel_count, CompressionMethod::LZ4);
+
+			  bitmap_vector = left_result_vector[0];
+			  bitmap_sizes = left_result_vector[1];
+			  bitmap_is_compressed = left_result_vector[2];
+			  use_bitmap = left_result_vector[3][0];
 		  }
 
-		  active_log->compressed_perfect_probe_ht_log.PushBack(reinterpret_cast<idx_t>(left),
-			                                                   reinterpret_cast<idx_t>(right),
-			                                                   probe_sel_count,
-			                                                   active_lop->children[0]->out_start);
+		  active_log->compressed_perfect_probe_ht_log.PushBack(bitmap_vector, bitmap_sizes, bitmap_is_compressed,
+			                                                   bitmap_vector.size(), reinterpret_cast<idx_t>(compressed_right),probe_sel_count,
+			                                                   active_lop->children[0]->out_start, use_bitmap);
 
 		  active_log->SetLatestLSN({active_log->compressed_perfect_probe_ht_log.size, 2});
 

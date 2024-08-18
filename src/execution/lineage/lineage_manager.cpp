@@ -272,12 +272,16 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 				tmp_perfect_probe_ht_log_element_size += sizeof(std::vector<perfect_join_artifact>);
 				tmp_perfect_probe_ht_log_element_size += sizeof(perfect_join_artifact) * curr_log->perfect_probe_ht_log.capacity();
 
+				size_t tmp_left = 0;
+				size_t right_tmp = 0;
 				for(size_t i = 0; i < curr_log->perfect_probe_ht_log.size(); i++){
 					if(curr_log->perfect_probe_ht_log[i].left != nullptr){
 						tmp_perfect_probe_ht_log_buffer_size += sizeof(sel_t) * curr_log->perfect_probe_ht_log[i].count; // left
+						tmp_left += sizeof(sel_t) * curr_log->perfect_probe_ht_log[i].count;
 					}
 					if(curr_log->perfect_probe_ht_log[i].right != nullptr){
 						tmp_perfect_probe_ht_log_buffer_size += sizeof(sel_t) * curr_log->perfect_probe_ht_log[i].count; // right
+						right_tmp += sizeof(sel_t) * curr_log->perfect_probe_ht_log[i].count;
 					}
 				}
 
@@ -737,12 +741,25 @@ size_t LineageManager::GetCompressedArtifactSize() {
 
 				tmp_perfect_probe_ht_log_element_size += curr_log->compressed_perfect_probe_ht_log.GetBytesSize();
 
-				for(size_t i = 0; i < curr_log->compressed_perfect_probe_ht_log.size; i++){
-					if(curr_log->compressed_perfect_probe_ht_log.artifacts->left[i] != 0){
-						tmp_perfect_probe_ht_log_buffer_size += sizeof(sel_t) * curr_log->compressed_perfect_probe_ht_log.artifacts->count[i]; // left
+				size_t tmp = 0;
+				// left bitmap
+				if(curr_log->compressed_perfect_probe_ht_log.size != 0){
+					idx_t total_bitmap_num = curr_log->compressed_perfect_probe_ht_log.artifacts->start_bitmap_idx[curr_log->compressed_perfect_probe_ht_log.size];
+
+					for(size_t i = 0; i < total_bitmap_num; i++){
+						tmp_perfect_probe_ht_log_buffer_size += curr_log->compressed_perfect_probe_ht_log.artifacts->bitmap_size[i]; // sel_size
+						tmp += curr_log->compressed_perfect_probe_ht_log.artifacts->bitmap_size[i];
 					}
+				}
+
+				tmp = 0;
+				// right bitpack
+				for(size_t i = 0; i < curr_log->compressed_perfect_probe_ht_log.size; i++){
 					if(curr_log->compressed_perfect_probe_ht_log.artifacts->right[i] != 0){
-						tmp_perfect_probe_ht_log_buffer_size += sizeof(sel_t) * curr_log->compressed_perfect_probe_ht_log.artifacts->count[i]; // right
+						tmp_perfect_probe_ht_log_buffer_size += GetBitpackSize(reinterpret_cast<sel_t*>(curr_log->compressed_perfect_probe_ht_log.artifacts->right[i]),
+						                                                                curr_log->compressed_perfect_probe_ht_log.artifacts->count[i]); // right
+						tmp += GetBitpackSize(reinterpret_cast<sel_t*>(curr_log->compressed_perfect_probe_ht_log.artifacts->right[i]),
+						                      curr_log->compressed_perfect_probe_ht_log.artifacts->count[i]);
 					}
 				}
 

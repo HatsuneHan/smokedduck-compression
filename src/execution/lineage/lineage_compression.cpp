@@ -411,7 +411,7 @@ namespace duckdb {
 	    vector<idx_t> bitmap_is_compressed;
 	    vector<idx_t> use_bitmap;
 
-	    if(result_count >= 32) {
+	    if(result_count >= 16) {
 		    size_t bitmap_size = (STANDARD_VECTOR_SIZE + 7) / 8;
 		    unsigned char* bitmap = new unsigned char[bitmap_size];
 		    std::memset(bitmap, 0, bitmap_size);
@@ -500,6 +500,7 @@ namespace duckdb {
 					    }
 				    }
 			    }
+
 			    return sel_copy;
 		    }
 		    else {
@@ -512,7 +513,7 @@ namespace duckdb {
     }
 
     // because rle number may be idx_t, we need to use idx_t*
-	idx_t* ChangeSelTuplesToDeltaRLE(sel_t* sel_data, idx_t key_count){
+	idx_t* ChangeSelDataToDeltaRLE(sel_t* sel_data, idx_t key_count){
 
 		if(key_count <= 8){
 		    sel_t* sel_data_copy = new sel_t[key_count];
@@ -560,7 +561,7 @@ namespace duckdb {
 		return delta_rle;
     }
 
-    sel_t* ChangeDeltaRLEToSelTuples(idx_t* delta_rle, idx_t key_count){
+    sel_t* ChangeDeltaRLEToSelData(idx_t* delta_rle, idx_t key_count){
 
 	    if(key_count <= 8){
 		    return reinterpret_cast<sel_t*>(delta_rle);
@@ -615,32 +616,38 @@ namespace duckdb {
 
 	}
 
-    sel_t* ChangeSelBuildToDeltaBitpack(sel_t* sel_data, idx_t key_count) {
-
-	    if(key_count <= 8){
+    sel_t* ChangeSelDataToDeltaBitpack(sel_t* sel_data, idx_t key_count) {
+	    if(key_count <= 16){
 		    sel_t* sel_data_copy = new sel_t[key_count];
 		    std::copy(sel_data, sel_data + key_count, sel_data_copy);
 
 		    return sel_data_copy;
 	    }
 
-	    Compressed64ListWithSize* compressed_list = new Compressed64ListWithSize();
-	    compressed_list->PushBack(sel_data[0]);
+	    vector<sel_t> delta_bitpack_vector;
+	    delta_bitpack_vector.push_back(sel_data[0]);
 
 	    for(size_t i = 1; i < key_count; i++){
 		    if(sel_data[i] <= sel_data[i-1]){
 			    // actually no possibility of equal for sel_buildn
 
 			    // use 0 to represent the next ascending piece
-			    compressed_list->PushBack(0);
+			    delta_bitpack_vector.push_back(0);
 			    // directly store the data as the start of the ascending piece
-			    compressed_list->PushBack(sel_data[i]);
+			    delta_bitpack_vector.push_back(sel_data[i]);
 		    } else {
 			    // store delta
-			    idx_t delta = sel_data[i] - sel_data[i-1];
-			    compressed_list->PushBack(delta);
+			    sel_t delta = sel_data[i] - sel_data[i-1];
+			    delta_bitpack_vector.push_back(delta);
 		    }
 	    }
+
+	    idx_t data_length = delta_bitpack_vector.size();
+
+	    sel_t* delta_bitpack = new sel_t[data_length];
+	    std::copy(delta_bitpack_vector.begin(), delta_bitpack_vector.end(), delta_bitpack);
+	    Compressed64ListWithSize* compressed_list = new Compressed64ListWithSize(delta_bitpack, data_length);
+	    delete[] delta_bitpack;
 
 	    // the array looks like
 	    // start_1 delta_11 delta_12 ... delta_1n 0 start_2 delta_21 delta_22 ... delta_2n 0 start_3 delta_31 ...
@@ -650,9 +657,9 @@ namespace duckdb {
 		return reinterpret_cast<sel_t*>(compressed_list);
     }
 
-    sel_t* ChangeDeltaBitpackToSelBuild(sel_t* delta_bitpack, idx_t key_count) {
+    sel_t* ChangeDeltaBitpackToSelData(sel_t* delta_bitpack, idx_t key_count) {
 
-	    if(key_count <= 8){
+	    if(key_count <= 16){
 		    return delta_bitpack;
 	    }
 
@@ -682,12 +689,48 @@ namespace duckdb {
 	}
 
     size_t GetDeltaBitpackSize(sel_t* delta_bitpack, idx_t key_count) {
-	    if(key_count <= 8){
+	    if(key_count <= 16){
 		    return sizeof(sel_t) * key_count;
 	    } else {
 		    Compressed64ListWithSize* compressed_list = reinterpret_cast<Compressed64ListWithSize*>(delta_bitpack);
 		    return compressed_list->GetBytesSize();
 	    }
+    }
+
+    sel_t* ChangeSelDataToBitpack(sel_t* sel_data, idx_t count){
+
+	    if(count < 30){
+		    sel_t* sel_data_copy = new sel_t[count];
+		    std::copy(sel_data, sel_data + count, sel_data_copy);
+
+		    return sel_data_copy;
+	    }
+
+	    Compressed64ListWithSize* compressed_list = new Compressed64ListWithSize(sel_data, count);
+	    return reinterpret_cast<sel_t*>(compressed_list);
+    }
+
+    sel_t* ChangeBitpackToSelData(sel_t* compressed_list, idx_t count){
+	    if(count < 30){
+		    return compressed_list;
+	    }
+
+	    Compressed64ListWithSize* compressed_list_with_size = reinterpret_cast<Compressed64ListWithSize*>(compressed_list);
+	    sel_t* sel_data = new sel_t[count];
+	    for(size_t i = 0; i < count; i++){
+		    sel_data[i] = compressed_list_with_size->Get(i);
+	    }
+
+	    return sel_data;
+	}
+
+    size_t GetBitpackSize(sel_t* compressed_list, idx_t count){
+	    if(count < 30){
+		    return sizeof(sel_t) * count;
+	    }
+
+	    Compressed64ListWithSize* compressed_list_with_size = reinterpret_cast<Compressed64ListWithSize*>(compressed_list);
+	    return compressed_list_with_size->GetBytesSize();
     }
 }
 
