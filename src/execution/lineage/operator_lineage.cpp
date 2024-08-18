@@ -309,7 +309,17 @@ void OperatorLineage::PostProcess() {
 				  // TODO: check if this is correct. follow old implementation
 				  log_index->perfect_codes[build_idx] = log_index->codes[ptr[tuples_idx]];
 			  }
+
+			  if (key_count > 16) {
+				  delete[] sel_build_decode;
+			  }
+			  if (key_count > 8) {
+				  delete[] sel_tuples_decode;
+			  }
+
 		  }
+
+		  log[tkey]->compressed_perfect_full_scan_ht_log.Clear();
 
 	  } else {
 		  if (log.count(tkey) == 0 || log[tkey]->perfect_full_scan_ht_log.empty()){
@@ -364,12 +374,12 @@ void OperatorLineage::PostProcess() {
 			  }
 			  count_so_far += count;
 
-//			  if(use_bitmap){
-//				  delete[] left;
-//			  }
-//			  if(count >= 30){
-//				  delete[] right;
-//			  }
+			  if(use_bitmap){
+				  delete[] left;
+			  }
+			  if(count >= 30){
+				  delete[] right;
+			  }
 
 		  }
 		  log[tkey]->compressed_perfect_probe_ht_log.Clear();
@@ -639,7 +649,9 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
 			ptr = reinterpret_cast<data_ptr_t>(sel_copy);
 
 			// we store the sel_copy, so we can free the log
-//			log->compressed_filter_log.Clear();
+			if(log->compressed_filter_log.artifacts->use_bitmap[lsn]){
+				log->compressed_filter_log.Clear();
+			}
 
 		} else {
 			if (data_idx >= log->filter_log.size()){
@@ -680,6 +692,10 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
 
 			sel_t* sel_copy = ChangeBitMapToSel(log->compressed_row_group_log.artifacts, offset, data_idx);
 			ptr = reinterpret_cast<data_ptr_t>(sel_copy);
+
+			if(log->compressed_row_group_log.artifacts->use_bitmap[data_idx]){
+				log->compressed_row_group_log.Clear();
+			}
 
 		} else {
 			if (data_idx >= log->row_group_log.size()){
