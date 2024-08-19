@@ -142,7 +142,7 @@ void OperatorLineage::PostProcess() {
 			  }
 
 		  }
-		  log[tkey]->compressed_finalize_states_log.Clear();
+//		  log[tkey]->compressed_finalize_states_log.Clear();
 
 	  } else {
 		  if (log.count(tkey) == 0 || log[tkey]->finalize_states_log.empty()){
@@ -162,7 +162,7 @@ void OperatorLineage::PostProcess() {
 			  }
 			  count_so_far += res_count;
 		  }
-		  log[tkey]->finalize_states_log.clear();
+//		  log[tkey]->finalize_states_log.clear();
 	  }
       // free gather
 
@@ -181,7 +181,7 @@ void OperatorLineage::PostProcess() {
 				  log_index->codes[src[j]] = log_index->codes[target[j]];
 			  }
 		  }
-		  log[tkey]->compressed_combine_log.Clear();
+//		  log[tkey]->compressed_combine_log.Clear();
 	  } else {
 		  if (log.count(tkey) == 0 || log[tkey]->combine_log.empty()){
 			  continue;
@@ -196,7 +196,7 @@ void OperatorLineage::PostProcess() {
 			  }
 		  }
 		  // free combine
-		  log[tkey]->combine_log.clear();
+//		  log[tkey]->combine_log.clear();
 	  }
     }      
 
@@ -218,7 +218,8 @@ void OperatorLineage::PostProcess() {
 			  }
 			  count_so_far += res_count;
 		  }
-		  log[tkey]->compressed_reorder_log.clear();
+//		  log[tkey]->compressed_reorder_log.clear();
+
 	  } else {
 		  if (log.count(tkey) == 0 || log[tkey]->reorder_log.empty()){
 			  continue;
@@ -231,7 +232,7 @@ void OperatorLineage::PostProcess() {
 			  }
 			  count_so_far += res_count;
 		  }
-		  log[tkey]->reorder_log.clear();
+//		  log[tkey]->reorder_log.clear();
 	  }
     }
 		break;
@@ -277,7 +278,7 @@ void OperatorLineage::PostProcess() {
 			  }
 		  }
 
-		  log[tkey]->compressed_scatter_sel_log.Clear();
+//		  log[tkey]->compressed_scatter_sel_log.Clear();
 
 	  } else {
 		  if (log.count(tkey) == 0 || log[tkey]->scatter_sel_log.empty()){
@@ -341,7 +342,7 @@ void OperatorLineage::PostProcess() {
 
 		  }
 
-		  log[tkey]->compressed_perfect_full_scan_ht_log.Clear();
+//		  log[tkey]->compressed_perfect_full_scan_ht_log.Clear();
 
 	  } else {
 		  if (log.count(tkey) == 0 || log[tkey]->perfect_full_scan_ht_log.empty()){
@@ -404,7 +405,7 @@ void OperatorLineage::PostProcess() {
 			  }
 
 		  }
-		  log[tkey]->compressed_perfect_probe_ht_log.Clear();
+//		  log[tkey]->compressed_perfect_probe_ht_log.Clear();
 
 	  } else {
 		  if (log.count(tkey) == 0 || log[tkey]->perfect_probe_ht_log.empty()){
@@ -432,7 +433,7 @@ void OperatorLineage::PostProcess() {
 			  }
 			  count_so_far += count;
 		  }
-		  log[tkey]->perfect_probe_ht_log.clear();
+//		  log[tkey]->perfect_probe_ht_log.clear();
 	  }
       log[tkey]->execute_internal.clear();
     }
@@ -472,7 +473,7 @@ void OperatorLineage::PostProcess() {
 				  delete[] payload;
 			  }
 		  }
-		  log[tkey]->compressed_join_gather_log.Clear();
+//		  log[tkey]->compressed_join_gather_log.Clear();
 
 	  } else {
 		  if (log.count(tkey) == 0 || log[tkey]->join_gather_log.empty()){
@@ -495,7 +496,7 @@ void OperatorLineage::PostProcess() {
 			  }
 			  count_so_far += res_count;
 		  }
-		  log[tkey]->join_gather_log.clear();
+//		  log[tkey]->join_gather_log.clear();
 	  }
     }
     // std::cout << operator_id << " log_index: " << log_index->vals.size() << std::endl;
