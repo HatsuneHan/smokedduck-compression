@@ -255,16 +255,17 @@ idx_t GroupedAggregateHashTable::AddChunk(DataChunk &groups, Vector &group_hashe
 	  	auto ptrs = FlatVector::GetData<data_ptr_t>(state.addresses);
 		if (lineage_manager->compress){
 
-			bool is_ascend = true;
+			idx_t is_ascend_count = 0;
 			for (idx_t i = 1; i < groups.size(); i++) {
 				if (reinterpret_cast<idx_t>(ptrs[i]) < reinterpret_cast<idx_t>(ptrs[i - 1])) {
-					is_ascend = false;
-					break;
+					is_ascend_count++;
+					if(is_ascend_count > 2)
+						break;
 				}
 			}
 
-			data_ptr_t* addresses_compressed = ChangeAddressToBitpack(ptrs, groups.size(), is_ascend);
-			active_log->compressed_scatter_log.PushBack(reinterpret_cast<idx_t>(addresses_compressed), static_cast<idx_t>(is_ascend), groups.size());
+			data_ptr_t* addresses_compressed = ChangeAddressToBitpack(ptrs, groups.size(), is_ascend_count);
+			active_log->compressed_scatter_log.PushBack(reinterpret_cast<idx_t>(addresses_compressed), static_cast<idx_t>(is_ascend_count), groups.size());
 
 		} else {
 			unique_ptr<data_ptr_t[]> addresses_copy(new data_ptr_t[groups.size()]);

@@ -616,7 +616,7 @@ namespace duckdb {
 
 	}
 
-    sel_t* ChangeSelDataToDeltaBitpack(sel_t* sel_data, idx_t key_count) {
+    sel_t* ChangeSelDataToDeltaBitpack(const sel_t* sel_data, idx_t key_count) {
 	    if(key_count <= 16){
 		    sel_t* sel_data_copy = new sel_t[key_count];
 		    std::copy(sel_data, sel_data + key_count, sel_data_copy);
@@ -733,7 +733,7 @@ namespace duckdb {
 	    return compressed_list_with_size->GetBytesSize();
     }
 
-    data_ptr_t* ChangeAddressToBitpack(data_ptr_t* address_data, idx_t count, bool is_ascend){
+    data_ptr_t* ChangeAddressToBitpack(data_ptr_t* address_data, idx_t count, idx_t is_ascend){
 
 	    // case 1 too few data to compress, no need to compress
 	    if(count < 4){
@@ -744,22 +744,52 @@ namespace duckdb {
 	    }
 
 	    // case 2 ascending order, use delta bitpack
-	    if(is_ascend){
+	    if(is_ascend <= 2){
+		    // we need is_ascend + 1 Compressed64ListDelta*
+		    Compressed64ListDelta** compressed_delta_list = new Compressed64ListDelta*[is_ascend+1];
+		    idx_t curr_idx = 0;
+
 		    vector<idx_t> delta_bitpack_vector;
 		    delta_bitpack_vector.push_back(reinterpret_cast<idx_t>(address_data[0]));
-
 		    for(size_t i = 1; i < count; i++){
-			    idx_t delta = reinterpret_cast<idx_t>(address_data[i]) - reinterpret_cast<idx_t>(address_data[i-1]);
-			    delta_bitpack_vector.push_back(delta);
+			    if(reinterpret_cast<idx_t>(address_data[i]) >= reinterpret_cast<idx_t>(address_data[i-1])){
+				    idx_t delta = reinterpret_cast<idx_t>(address_data[i]) - reinterpret_cast<idx_t>(address_data[i-1]);
+				    delta_bitpack_vector.push_back(delta);
+			    } else {
+				    idx_t data_length = delta_bitpack_vector.size();
+				    if(data_length == 1){
+					    idx_t* delta_bitpack = nullptr;
+					    compressed_delta_list[curr_idx] = new Compressed64ListDelta(delta_bitpack, 0, delta_bitpack_vector[0]);
+				    } else {
+					    idx_t* delta_bitpack = new idx_t[data_length-1];
+					    std::copy(delta_bitpack_vector.begin() + 1, delta_bitpack_vector.end(), delta_bitpack);
+					    compressed_delta_list[curr_idx] = new Compressed64ListDelta(delta_bitpack, data_length-1, delta_bitpack_vector[0]);
+					    delete[] delta_bitpack;
+				    }
+				    curr_idx++;
+
+				    delta_bitpack_vector.clear();
+				    delta_bitpack_vector.push_back(reinterpret_cast<idx_t>(address_data[i]));
+			    }
 		    }
 
 		    idx_t data_length = delta_bitpack_vector.size();
+		    if(data_length == 1){
+			    idx_t* delta_bitpack = nullptr;
+			    compressed_delta_list[curr_idx] = new Compressed64ListDelta(delta_bitpack, 0, delta_bitpack_vector[0]);
+		    } else {
+			    idx_t* delta_bitpack = new idx_t[data_length-1];
+			    std::copy(delta_bitpack_vector.begin() + 1, delta_bitpack_vector.end(), delta_bitpack);
+			    compressed_delta_list[curr_idx] = new Compressed64ListDelta(delta_bitpack, data_length-1, delta_bitpack_vector[0]);
+			    delete[] delta_bitpack;
+		    }
 
-		    idx_t* delta_bitpack = new idx_t[data_length-1];
-		    std::copy(delta_bitpack_vector.begin() + 1, delta_bitpack_vector.end(), delta_bitpack);
+		    curr_idx++;
 
-		    Compressed64ListDelta* compressed_delta_list = new Compressed64ListDelta(delta_bitpack, data_length-1, delta_bitpack_vector[0]);
-		    delete[] delta_bitpack;
+		    // quick check
+		    if(curr_idx != is_ascend + 1){
+			    throw std::runtime_error("curr_idx != is_ascend + 1");
+		    }
 
 		    return reinterpret_cast<data_ptr_t*>(compressed_delta_list);
 	    }
@@ -770,19 +800,30 @@ namespace duckdb {
 
     }
 
-    data_ptr_t* ChangeBitpackToAddress(data_ptr_t* compressed_list, idx_t count, bool is_ascend){
+    data_ptr_t* ChangeBitpackToAddress(data_ptr_t* compressed_list, idx_t count, idx_t is_ascend){
 
 	    if(count < 4){
 		    return compressed_list;
 	    }
 
-	    if(is_ascend){
-		    Compressed64ListDelta* compressed_delta_list = reinterpret_cast<Compressed64ListDelta*>(compressed_list);
+	    if(is_ascend <= 2){
+		    Compressed64ListDelta** compressed_delta_list = reinterpret_cast<Compressed64ListDelta**>(compressed_list);
 		    data_ptr_t * address_data = new data_ptr_t[count];
-		    address_data[0] = reinterpret_cast<data_ptr_t>(compressed_delta_list->delta_base);
 
-		    for(size_t i = 1; i < count; i++){
-			    address_data[i] = reinterpret_cast<data_ptr_t>(reinterpret_cast<idx_t>(address_data[i-1]) + compressed_delta_list->Get(i-1));
+		    idx_t curr_idx = 0;
+		    for(size_t i = 0; i < is_ascend+1; i++){
+			    idx_t curr_delta = 0;
+
+			    address_data[curr_idx] = reinterpret_cast<data_ptr_t>(compressed_delta_list[i]->delta_base);
+			    curr_idx++;
+
+			    if(compressed_delta_list[i]->size != 0){
+				    while(curr_delta < compressed_delta_list[i]->size){
+					    address_data[curr_idx] = reinterpret_cast<data_ptr_t>(reinterpret_cast<idx_t>(address_data[curr_idx-1]) + compressed_delta_list[i]->Get(curr_delta));
+					    curr_delta++;
+					    curr_idx++;
+				    }
+			    }
 		    }
 
 		    return address_data;
@@ -797,13 +838,18 @@ namespace duckdb {
 	    return address_data;
     }
 
-    size_t GetAddressBitpackSize(data_ptr_t* compressed_list, idx_t count, bool is_ascend){
+    size_t GetAddressBitpackSize(data_ptr_t* compressed_list, idx_t count, idx_t is_ascend){
 
 	    if(count < 4){
 		    return sizeof(data_ptr_t) * count;
-	    } else if (is_ascend){
-		    Compressed64ListDelta* compressed_delta_list = reinterpret_cast<Compressed64ListDelta*>(compressed_list);
-		    return compressed_delta_list->GetBytesSize();
+	    } else if (is_ascend <= 2){
+		    Compressed64ListDelta** compressed_delta_list = reinterpret_cast<Compressed64ListDelta**>(compressed_list);
+		    size_t total_size = 0;
+		    total_size += sizeof(Compressed64ListDelta*) * (is_ascend+1);
+		    for(size_t i = 0; i < is_ascend+1; i++){
+			    total_size += compressed_delta_list[i]->GetBytesSize();
+		    }
+		    return total_size;
 	    } else {
 		    Compressed64ListWithSize* compressed_list_with_size = reinterpret_cast<Compressed64ListWithSize*>(compressed_list);
 		    return compressed_list_with_size->GetBytesSize();

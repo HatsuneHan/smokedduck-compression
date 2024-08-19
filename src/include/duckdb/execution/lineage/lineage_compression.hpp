@@ -54,7 +54,7 @@ idx_t* ChangeSelDataToDeltaRLE(sel_t*, idx_t);
 sel_t* ChangeDeltaRLEToSelData(idx_t*, idx_t);
 size_t GetDeltaRLESize(idx_t*, idx_t);
 
-sel_t* ChangeSelDataToDeltaBitpack(sel_t*, idx_t);
+sel_t* ChangeSelDataToDeltaBitpack(const sel_t*, idx_t);
 sel_t* ChangeDeltaBitpackToSelData(sel_t*, idx_t);
 size_t GetDeltaBitpackSize(sel_t*, idx_t);
 
@@ -62,9 +62,9 @@ sel_t* ChangeSelDataToBitpack(sel_t*, idx_t);
 sel_t* ChangeBitpackToSelData(sel_t*, idx_t);
 size_t GetSelBitpackSize(sel_t*, idx_t);
 
-data_ptr_t* ChangeAddressToBitpack(data_ptr_t*, idx_t, bool);
-data_ptr_t* ChangeBitpackToAddress(data_ptr_t*, idx_t, bool);
-size_t GetAddressBitpackSize(data_ptr_t*, idx_t, bool);
+data_ptr_t* ChangeAddressToBitpack(data_ptr_t*, idx_t, idx_t);
+data_ptr_t* ChangeBitpackToAddress(data_ptr_t*, idx_t, idx_t);
+size_t GetAddressBitpackSize(data_ptr_t*, idx_t, idx_t);
 
 // use to replace vector<idx_t>
 
@@ -100,6 +100,9 @@ public:
 
 	template<typename DATA_TYPE>
 	Compressed64ListWithSize(DATA_TYPE* sel_data, idx_t count) : Compressed64List(), size(0) {
+		if (count == 0) {
+			return;
+		}
 
 		idx_t sel_start = static_cast<idx_t>(sel_data[0]);
 		base = sel_start & ~0x1ull;
@@ -418,9 +421,9 @@ public:
 			if(artifacts->count[i] < 4){
 				data_ptr_t* addresses_addr = reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
 				delete[] addresses_addr;
-			} else if(artifacts->is_ascend[i]){
-				Compressed64ListDelta* compressed_delta_list = reinterpret_cast<Compressed64ListDelta*>(artifacts->addresses[i]);
-				delete compressed_delta_list;
+			} else if(artifacts->is_ascend[i] <= 2){
+				Compressed64ListDelta** compressed_delta_list = reinterpret_cast<Compressed64ListDelta**>(artifacts->addresses[i]);
+				delete[] compressed_delta_list;
 			} else {
 				Compressed64ListWithSize* compressed_list = reinterpret_cast<Compressed64ListWithSize*>(artifacts->addresses[i]);
 				delete compressed_list;
@@ -434,9 +437,9 @@ public:
 			if(artifacts->count[i] < 4){
 				data_ptr_t* addresses_addr = reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
 				delete[] addresses_addr;
-			} else if(artifacts->is_ascend[i]){
-				Compressed64ListDelta* compressed_delta_list = reinterpret_cast<Compressed64ListDelta*>(artifacts->addresses[i]);
-				delete compressed_delta_list;
+			} else if(artifacts->is_ascend[i] <= 2){
+				Compressed64ListDelta** compressed_delta_list = reinterpret_cast<Compressed64ListDelta**>(artifacts->addresses[i]);
+				delete[] compressed_delta_list;
 			} else {
 				Compressed64ListWithSize* compressed_list = reinterpret_cast<Compressed64ListWithSize*>(artifacts->addresses[i]);
 				delete compressed_list;
@@ -546,6 +549,8 @@ public:
 
 struct CompressedAddressSelArtifacts{
 	Compressed64List addresses;
+	Compressed64List is_ascend;
+
 	Compressed64List sel;
 	Compressed64List count;
 	Compressed64List in_start;
@@ -560,32 +565,58 @@ public:
 	// Destructor
 	~CompressedAddressSelArtifactList() {
 		for (size_t i = 0; i < size; i++) {
-			data_ptr_t* addresses_addr = reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
+			if(artifacts->count[i] < 4){
+				data_ptr_t* addresses_addr = reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
+				delete[] addresses_addr;
+			} else if(artifacts->is_ascend[i] <= 2){
+				Compressed64ListDelta** compressed_delta_list = reinterpret_cast<Compressed64ListDelta**>(artifacts->addresses[i]);
+				delete[] compressed_delta_list;
+			} else {
+				Compressed64ListWithSize* compressed_list = reinterpret_cast<Compressed64ListWithSize*>(artifacts->addresses[i]);
+				delete compressed_list;
+			}
+		}
+
+		for (size_t i = 0; i < size; i++) {
 			sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->sel[i]);
-			delete[] addresses_addr;
 			delete[] sel_addr;
 		}
+
 		delete artifacts;
 	}
 
 	void Clear(){
 		for (size_t i = 0; i < size; i++) {
-			data_ptr_t* addresses_addr = reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
+			if(artifacts->count[i] < 4){
+				data_ptr_t* addresses_addr = reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
+				delete[] addresses_addr;
+			} else if(artifacts->is_ascend[i] <= 2){
+				Compressed64ListDelta** compressed_delta_list = reinterpret_cast<Compressed64ListDelta**>(artifacts->addresses[i]);
+				delete[] compressed_delta_list;
+			} else {
+				Compressed64ListWithSize* compressed_list = reinterpret_cast<Compressed64ListWithSize*>(artifacts->addresses[i]);
+				delete compressed_list;
+			}
+		}
+
+		for (size_t i = 0; i < size; i++) {
 			sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->sel[i]);
-			delete[] addresses_addr;
 			delete[] sel_addr;
 		}
+
 		delete artifacts;
 		artifacts = nullptr;
 		size = 0;
 	}
 
-	void PushBack(idx_t addresses_p, idx_t sel_p, idx_t count_p, idx_t in_start_p){
+	void PushBack(idx_t addresses_p, idx_t is_ascend_p, idx_t sel_p, idx_t count_p, idx_t in_start_p){
 		if (size == 0) {
 			artifacts = new CompressedAddressSelArtifacts();
 		}
 
 		this->artifacts->addresses.PushBack(addresses_p, size);
+		this->artifacts->is_ascend.PushBack(is_ascend_p, size);
+
 		this->artifacts->sel.PushBack(sel_p, size);
 		this->artifacts->count.PushBack(count_p, size);
 		this->artifacts->in_start.PushBack(in_start_p, size);
@@ -598,6 +629,7 @@ public:
 			return sizeof(CompressedAddressSelArtifactList);
 		} else {
 			return this->artifacts->addresses.GetBytesSize()
+			       + this->artifacts->is_ascend.GetBytesSize()
 			       + this->artifacts->sel.GetBytesSize()
 			       + this->artifacts->count.GetBytesSize()
 			       + this->artifacts->in_start.GetBytesSize()

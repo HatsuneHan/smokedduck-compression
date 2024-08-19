@@ -125,8 +125,8 @@ void OperatorLineage::PostProcess() {
 			  // std::cout << count_so_far+res_count << " finalize states: " << tkey << " " << log[tkey]->finalize_states_log.size() << std::endl;
 
 			  data_ptr_t* compressed_payload = reinterpret_cast<data_ptr_t*>(log[tkey]->compressed_finalize_states_log.artifacts->addresses[k]);
-			  bool is_ascend = static_cast<bool>(log[tkey]->compressed_finalize_states_log.artifacts->is_ascend[k]);
-			  data_ptr_t* payload = ChangeBitpackToAddress(compressed_payload, res_count, is_ascend);
+			  idx_t is_ascend_count = log[tkey]->compressed_finalize_states_log.artifacts->is_ascend[k];
+			  data_ptr_t* payload = ChangeBitpackToAddress(compressed_payload, res_count, is_ascend_count);
 
 			  for (idx_t j=0; j < res_count; ++j) {
 				  if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
@@ -246,11 +246,17 @@ void OperatorLineage::PostProcess() {
 		  for (size_t k = 0; k < log[tkey]->compressed_scatter_sel_log.size; k++) {
 			  idx_t res_count = log[tkey]->compressed_scatter_sel_log.artifacts->count[k];
 			  idx_t in_start = log[tkey]->compressed_scatter_sel_log.artifacts->in_start[k];
-			  auto payload = reinterpret_cast<data_ptr_t*>(log[tkey]->compressed_scatter_sel_log.artifacts->addresses[k]);
-			  idx_t sel_num = log[tkey]->compressed_scatter_sel_log.artifacts->sel[k];
 
-			  if (sel_num) {
-				  auto sel = reinterpret_cast<sel_t*>(sel_num);
+			  data_ptr_t* compressed_payload = reinterpret_cast<data_ptr_t*>(log[tkey]->compressed_scatter_sel_log.artifacts->addresses[k]);
+			  idx_t is_ascend_count = log[tkey]->compressed_scatter_sel_log.artifacts->is_ascend[k];
+			  data_ptr_t* payload = ChangeBitpackToAddress(compressed_payload, res_count, is_ascend_count);
+
+			  idx_t compressed_sel_num = log[tkey]->compressed_scatter_sel_log.artifacts->sel[k];
+
+			  if (compressed_sel_num) {
+				  sel_t* sel = ChangeDeltaBitpackToSelData(reinterpret_cast<sel_t*>(compressed_sel_num), res_count);
+//				  auto sel = reinterpret_cast<sel_t*>(compressed_sel_num);
+
 				  for (idx_t j=0; j < res_count; ++j) {
 					  if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
 						  log_index->codes[payload[j]] = sel[j] + in_start;
@@ -888,8 +894,8 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
 			}
 			count = log->compressed_scatter_log.artifacts->count[data_idx];
 			data_ptr_t* compressed_payload = reinterpret_cast<data_ptr_t*>(log->compressed_scatter_log.artifacts->addresses[data_idx]);
-			bool is_ascend = static_cast<bool>(log->compressed_scatter_log.artifacts->is_ascend[data_idx]);
-			payload = ChangeBitpackToAddress(compressed_payload, count, is_ascend);
+			idx_t is_ascend_count = log->compressed_scatter_log.artifacts->is_ascend[data_idx];
+			payload = ChangeBitpackToAddress(compressed_payload, count, is_ascend_count);
 
 		} else {
 			if (data_idx >= log->scatter_log.size()){

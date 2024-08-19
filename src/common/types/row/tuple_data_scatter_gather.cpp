@@ -556,16 +556,27 @@ void TupleDataCollection::Scatter(TupleDataChunkState &chunk_state, const DataCh
 #ifdef LINEAGE
     if (active_log && active_log->capture) {
 		if (lineage_manager->compress){
-			data_ptr_t* addresses_copy = new data_ptr_t[append_count];
-			std::copy(row_locations, row_locations + append_count, addresses_copy);
+
+			size_t is_ascend_count = 0;
+			for (idx_t i = 1; i < append_count; i++) {
+				if (reinterpret_cast<idx_t>(row_locations[i]) < reinterpret_cast<idx_t>(row_locations[i - 1])) {
+					is_ascend_count++;
+					if(is_ascend_count > 2)
+						break;
+				}
+			}
+
+			data_ptr_t* addresses_compressed = ChangeAddressToBitpack(row_locations, append_count, is_ascend_count);
+
 			if (append_sel.data()) {
-				sel_t* sel_copy = new sel_t[append_count];
-				std::copy(append_sel.data(), append_sel.data() + append_count, sel_copy);
-				active_log->compressed_scatter_sel_log.PushBack(reinterpret_cast<idx_t>(addresses_copy),
-				                                                reinterpret_cast<idx_t>(sel_copy), append_count,
+				sel_t* append_sel_deltabitpack = ChangeSelDataToDeltaBitpack(append_sel.data(), append_count);
+				active_log->compressed_scatter_sel_log.PushBack(reinterpret_cast<idx_t>(addresses_compressed),
+				                                                static_cast<idx_t>(is_ascend_count),
+				                                                reinterpret_cast<idx_t>(append_sel_deltabitpack), append_count,
 				                                                active_lop->children[1]->out_start);
 			} else {
-				active_log->compressed_scatter_sel_log.PushBack(reinterpret_cast<idx_t>(addresses_copy), 0,
+				active_log->compressed_scatter_sel_log.PushBack(reinterpret_cast<idx_t>(addresses_compressed),
+				                                                static_cast<idx_t>(is_ascend_count), 0,
 				                                                append_count, active_lop->children[1]->out_start);
 			}
 		} else {

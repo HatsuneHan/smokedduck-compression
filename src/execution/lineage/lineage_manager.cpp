@@ -810,7 +810,7 @@ size_t LineageManager::GetCompressedArtifactSize() {
 						tmp_scatter_log_buffer_size += GetAddressBitpackSize(
 						    reinterpret_cast<data_ptr_t*>(curr_log->compressed_scatter_log.artifacts->addresses[i]),
 						    curr_log->compressed_scatter_log.artifacts->count[i],
-						    static_cast<bool>(curr_log->compressed_scatter_log.artifacts->is_ascend[i]));
+						    curr_log->compressed_scatter_log.artifacts->is_ascend[i]);
 					}
 				}
 
@@ -832,12 +832,19 @@ size_t LineageManager::GetCompressedArtifactSize() {
 				tmp_scatter_sel_log_element_size += curr_log->compressed_scatter_sel_log.GetBytesSize();
 
 				for(size_t i = 0; i < curr_log->compressed_scatter_sel_log.size; i++){
+
 					if(curr_log->compressed_scatter_sel_log.artifacts->addresses[i] != 0){
-						tmp_scatter_sel_log_buffer_size += sizeof(data_ptr_t) * curr_log->compressed_scatter_sel_log.artifacts->count[i]; // addresses
+						tmp_scatter_sel_log_buffer_size += GetAddressBitpackSize(
+						    reinterpret_cast<data_ptr_t*>(curr_log->compressed_scatter_sel_log.artifacts->addresses[i]),
+						    curr_log->compressed_scatter_sel_log.artifacts->count[i],
+						    curr_log->compressed_scatter_sel_log.artifacts->is_ascend[i]);
 					}
+
 					if(curr_log->compressed_scatter_sel_log.artifacts->sel[i] != 0){
-						tmp_scatter_sel_log_buffer_size += sizeof(sel_t) * curr_log->compressed_scatter_sel_log.artifacts->count[i]; // sel
+						tmp_scatter_sel_log_buffer_size += GetDeltaBitpackSize(reinterpret_cast<sel_t*>(curr_log->compressed_scatter_sel_log.artifacts->sel[i]),
+						                                                        curr_log->compressed_scatter_sel_log.artifacts->count[i]); // sel
 					}
+
 				}
 
 				tmp_scatter_sel_log_size = tmp_scatter_sel_log_element_size + tmp_scatter_sel_log_buffer_size;
@@ -859,7 +866,10 @@ size_t LineageManager::GetCompressedArtifactSize() {
 
 				for(size_t i = 0; i < curr_log->compressed_gather_log.size; i++){
 					if(curr_log->compressed_gather_log.artifacts->addresses[i] != 0){
-						tmp_gather_log_buffer_size += sizeof(data_ptr_t) * curr_log->compressed_gather_log.artifacts->count[i]; // addresses
+						tmp_gather_log_buffer_size += GetAddressBitpackSize(
+						    reinterpret_cast<data_ptr_t*>(curr_log->compressed_gather_log.artifacts->addresses[i]),
+						    curr_log->compressed_gather_log.artifacts->count[i],
+						    curr_log->compressed_gather_log.artifacts->is_ascend[i]);
 					}
 				}
 
@@ -911,7 +921,7 @@ size_t LineageManager::GetCompressedArtifactSize() {
 						tmp_finalize_states_log_buffer_size += GetAddressBitpackSize(
 						    reinterpret_cast<data_ptr_t*>(curr_log->compressed_finalize_states_log.artifacts->addresses[i]),
 						    curr_log->compressed_finalize_states_log.artifacts->count[i],
-						    static_cast<bool>(curr_log->compressed_finalize_states_log.artifacts->is_ascend[i]));
+						    curr_log->compressed_finalize_states_log.artifacts->is_ascend[i]);
 					}
 				}
 
