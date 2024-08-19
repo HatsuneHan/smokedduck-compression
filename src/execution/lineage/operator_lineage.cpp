@@ -271,7 +271,14 @@ void OperatorLineage::PostProcess() {
 					  }
 				  }
 			  }
+
+			  if(res_count >= 4){
+				  delete[] payload;
+			  }
 		  }
+
+		  log[tkey]->compressed_scatter_sel_log.Clear();
+
 	  } else {
 		  if (log.count(tkey) == 0 || log[tkey]->scatter_sel_log.empty()){
 			  continue;
@@ -442,10 +449,16 @@ void OperatorLineage::PostProcess() {
 
 			  idx_t res_count = log[tkey]->compressed_join_gather_log.artifacts->count[lsn];
 			  idx_t in_start = log[tkey]->compressed_join_gather_log.artifacts->in_start[lsn];
-			  auto payload = reinterpret_cast<data_ptr_t*>(log[tkey]->compressed_join_gather_log.artifacts->rhs[lsn]);
-			  auto lhs = reinterpret_cast<sel_t*>(log[tkey]->compressed_join_gather_log.artifacts->lhs[lsn]);
+			  idx_t use_rle = log[tkey]->compressed_join_gather_log.artifacts->use_rle[lsn];
 
-			  // std::cout << operator_id << " " <<  k << " " << res_count << " " << count_so_far << std::endl;
+			  data_ptr_t* payload = nullptr;
+			  data_ptr_t* compressed_payload = reinterpret_cast<data_ptr_t*>(log[tkey]->compressed_join_gather_log.artifacts->rhs[lsn]);
+			  if(compressed_payload != nullptr){
+				  payload = ChangeRLEBitpackToAddress(compressed_payload, res_count, use_rle);
+			  }
+
+			  sel_t* lhs = ChangeBitMapToSel(log[tkey]->compressed_join_gather_log.artifacts, 0, lsn);
+
 			  for (idx_t j=0; j < res_count; ++j) {
 				  if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
 					  // std::cout << "probe: " << j<< " " << lhs[j] << " " << res_count <<  " " << (void*)payload[j] << std::endl;
@@ -454,8 +467,13 @@ void OperatorLineage::PostProcess() {
 				  log_index->vals_2.push_back( lhs[j] + in_start );
 			  }
 			  count_so_far += res_count;
+
+			  if(use_rle == 1 || (use_rle == 0 && res_count > 8)){
+				  delete[] payload;
+			  }
 		  }
 		  log[tkey]->compressed_join_gather_log.Clear();
+
 	  } else {
 		  if (log.count(tkey) == 0 || log[tkey]->join_gather_log.empty()){
 			  continue;

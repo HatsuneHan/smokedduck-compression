@@ -856,6 +856,164 @@ namespace duckdb {
 	    }
 
 	}
+
+
+    data_ptr_t* ChangeAddressToRLEBitpack(data_ptr_t* address_data, idx_t count, idx_t use_rle){
+	    // case 1 use rle (+ bitpack)
+	    if(use_rle){
+		    vector<idx_t> rle_bitpack;
+		    rle_bitpack.push_back(reinterpret_cast<idx_t>(address_data[0]));
+		    idx_t curr_rle = 1;
+
+			for(size_t i = 1; i < count; i++){
+			    if(address_data[i] == address_data[i-1]){
+				    curr_rle++;
+			    } else {
+				    rle_bitpack.push_back(curr_rle);
+				    rle_bitpack.push_back(reinterpret_cast<idx_t>(address_data[i]));
+				    curr_rle = 1;
+			    }
+		    }
+		    rle_bitpack.push_back(curr_rle);
+
+		    idx_t* rle_bitpack_array = new idx_t[rle_bitpack.size()];
+		    std::copy(rle_bitpack.begin(), rle_bitpack.end(), rle_bitpack_array);
+
+		    if(use_rle == 1){
+			    Compressed64ListWithSize* compressed_list_with_size = new Compressed64ListWithSize(rle_bitpack_array, rle_bitpack.size());
+			    delete[] rle_bitpack_array;
+			    return reinterpret_cast<data_ptr_t*>(compressed_list_with_size);
+		    } else if (use_rle == 2){
+			    return reinterpret_cast<data_ptr_t*>(rle_bitpack_array);
+		    }
+	    }
+
+	    // case 2 use original data
+	    if(count <= 8){
+		    data_ptr_t* address_data_copy = new data_ptr_t[count];
+		    std::copy(address_data, address_data + count, address_data_copy);
+
+		    return address_data_copy;
+	    }
+
+	    // case 3 use bitpack
+	    Compressed64ListWithSize* compressed_list_with_size = new Compressed64ListWithSize(reinterpret_cast<idx_t*>(address_data), count);
+	    return reinterpret_cast<data_ptr_t*>(compressed_list_with_size);
+
+    }
+
+    data_ptr_t* ChangeRLEBitpackToAddress(data_ptr_t* compressed_list, idx_t count, idx_t use_rle){
+
+	    if(use_rle){
+		    data_ptr_t* rle_bitpack_array = new data_ptr_t[count];
+		    idx_t curr_idx = 0;
+
+		    if(use_rle == 1){
+			    Compressed64ListWithSize* compressed_list_with_size = reinterpret_cast<Compressed64ListWithSize*>(compressed_list);
+			    for(size_t i = 0; i < compressed_list_with_size->size; i+=2){
+				    rle_bitpack_array[curr_idx] = reinterpret_cast<data_ptr_t>(compressed_list_with_size->Get(i));
+				    curr_idx++;
+
+				    idx_t rle = compressed_list_with_size->Get(i+1);
+				    for(size_t j = 0; j < rle - 1; j++){
+					    rle_bitpack_array[curr_idx] = reinterpret_cast<data_ptr_t>(compressed_list_with_size->Get(i));
+					    curr_idx++;
+				    }
+			    }
+		    } else if(use_rle == 2){
+			    idx_t rle_idx = 0;
+			    while(curr_idx < count){
+				    rle_bitpack_array[curr_idx] = compressed_list[rle_idx];
+				    curr_idx++;
+
+				    idx_t rle = reinterpret_cast<idx_t>(compressed_list[rle_idx+1]);
+				    for(size_t j = 0; j < rle - 1; j++){
+					    rle_bitpack_array[curr_idx] = compressed_list[rle_idx];
+					    curr_idx++;
+				    }
+				    rle_idx += 2;
+			    }
+		    }
+
+		    if(curr_idx != count){
+			    throw std::runtime_error("curr_idx != count");
+		    }
+
+		    return rle_bitpack_array;
+	    }
+
+	    if(count <= 8){
+		    return compressed_list;
+	    }
+
+	    Compressed64ListWithSize* compressed_list_with_size = reinterpret_cast<Compressed64ListWithSize*>(compressed_list);
+	    data_ptr_t* address_data = new data_ptr_t[count];
+	    for(size_t i = 0; i < count; i++){
+		    address_data[i] = reinterpret_cast<data_ptr_t>(compressed_list_with_size->Get(i));
+	    }
+
+	    return address_data;
+    }
+
+    size_t GetAddressRLEBitpackSize(data_ptr_t* compressed_list, idx_t count, idx_t use_rle){
+
+	    if(use_rle == 2) {
+		    data_ptr_t *rle_bitpack_array = new data_ptr_t[count];
+
+		    idx_t curr_idx = 0;
+		    idx_t rle_idx = 0;
+
+		    while (curr_idx < count) {
+			    rle_bitpack_array[curr_idx] = compressed_list[rle_idx];
+			    curr_idx++;
+
+			    idx_t rle = reinterpret_cast<idx_t>(compressed_list[rle_idx + 1]);
+			    for (size_t j = 0; j < rle - 1; j++) {
+				    rle_bitpack_array[curr_idx] = compressed_list[rle_idx];
+				    curr_idx++;
+			    }
+			    rle_idx += 2;
+		    }
+		    delete[] rle_bitpack_array;
+
+		    return sizeof(data_ptr_t) * rle_idx;
+
+	    } else if (use_rle == 1){
+		    Compressed64ListWithSize* compressed_list_with_size = reinterpret_cast<Compressed64ListWithSize*>(compressed_list);
+		    return compressed_list_with_size->GetBytesSize();
+	    }
+
+	    if(count <= 8){
+		    return sizeof(data_ptr_t) * count;
+	    }
+
+	    Compressed64ListWithSize* compressed_list_with_size = reinterpret_cast<Compressed64ListWithSize*>(compressed_list);
+	    return compressed_list_with_size->GetBytesSize();
+	}
+
+    idx_t GetUseRle(data_ptr_t* rhs_ptrs, idx_t result_count){
+	    size_t rle_number = 1;
+	    idx_t use_rle = 0;
+	    idx_t prev_val = reinterpret_cast<idx_t>(rhs_ptrs[0]);
+	    for (idx_t i = 1; i < result_count; i++) {
+		    idx_t curr_val = reinterpret_cast<idx_t>(rhs_ptrs[i]);
+		    if(curr_val != prev_val){
+			    rle_number++;
+			    prev_val = curr_val;
+		    }
+	    }
+
+	    if( 2 * rle_number < result_count){
+		    if (rle_number >= 12){ // use bitpack
+			    use_rle = 1;
+		    } else { // directly rle
+			    use_rle = 2;
+		    }
+	    }
+
+	    return use_rle;
+    }
+
 }
 
 #endif

@@ -944,10 +944,17 @@ size_t LineageManager::GetCompressedArtifactSize() {
 
 				for(size_t i = 0; i < curr_log->compressed_join_gather_log.size; i++){
 					if(curr_log->compressed_join_gather_log.artifacts->rhs[i] != 0){
-						tmp_join_gather_log_buffer_size += sizeof(data_ptr_t) * curr_log->compressed_join_gather_log.artifacts->count[i]; // rhs
+						tmp_join_gather_log_buffer_size += GetAddressRLEBitpackSize(reinterpret_cast<data_ptr_t*>(curr_log->compressed_join_gather_log.artifacts->rhs[i]),
+						                                                           curr_log->compressed_join_gather_log.artifacts->count[i],
+						                                                            curr_log->compressed_join_gather_log.artifacts->use_rle[i]); // rhs
 					}
-					if(curr_log->compressed_join_gather_log.artifacts->lhs[i] != 0){
-						tmp_join_gather_log_buffer_size += sizeof(sel_t) * curr_log->compressed_join_gather_log.artifacts->count[i]; // lhs
+				}
+
+				if(curr_log->compressed_join_gather_log.size != 0){
+					idx_t total_bitmap_num = curr_log->compressed_join_gather_log.artifacts->start_bitmap_idx[curr_log->compressed_join_gather_log.size];
+
+					for(size_t i = 0; i < total_bitmap_num; i++){
+						tmp_join_gather_log_buffer_size += curr_log->compressed_join_gather_log.artifacts->bitmap_size[i]; // lhs
 					}
 				}
 

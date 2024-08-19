@@ -554,12 +554,22 @@ void ScanStructure::NextInnerJoin(DataChunk &keys, DataChunk &left, DataChunk &r
 			  rhs_ptrs[i] = ptrs[idx];
 		  }
 
-		  sel_t* sel_copy = new sel_t[result_count];
-		  std::copy(result_vector.data(), result_vector.data() + result_count, sel_copy);
+		  idx_t use_rle = GetUseRle(rhs_ptrs, result_count);
+		  data_ptr_t* compressed_rhs_ptrs = ChangeAddressToRLEBitpack(rhs_ptrs, result_count, use_rle);
+		  delete[] rhs_ptrs;
 
-		  active_log->compressed_join_gather_log.PushBack(reinterpret_cast<idx_t>(rhs_ptrs),
-				                                          reinterpret_cast<idx_t>(sel_copy),
-				                                          result_count, active_lop->children[0]->out_start);
+		  vector<vector<idx_t>> result_sel_vector = ChangeSelToBitMap(result_vector.data(), result_count, CompressionMethod::LZ4);
+
+		  vector<idx_t> &bitmap_vector = result_sel_vector[0];
+		  vector<idx_t> &bitmap_sizes = result_sel_vector[1];
+		  vector<idx_t> &bitmap_is_compressed = result_sel_vector[2];
+		  vector<idx_t> &use_bitmap = result_sel_vector[3];
+
+		  active_log->compressed_join_gather_log.PushBack(reinterpret_cast<idx_t>(compressed_rhs_ptrs), use_rle,
+				                                          bitmap_vector, bitmap_sizes, bitmap_is_compressed,
+				                                          bitmap_vector.size(), result_count,
+				                                          active_lop->children[0]->out_start, use_bitmap[0]);
+
 		  active_log->SetLatestLSN({active_log->compressed_join_gather_log.size, 1});
 
 	  } else {
@@ -624,10 +634,18 @@ void ScanStructure::NextSemiOrAntiJoin(DataChunk &keys, DataChunk &left, DataChu
 #ifdef LINEAGE
 		if (lineage_manager->capture && active_log) {
 			if (lineage_manager->compress){
-				sel_t* sel_copy = new sel_t[result_count];
-				std::copy(sel.data(), sel.data() + result_count, sel_copy);
-				active_log->compressed_join_gather_log.PushBack(0, reinterpret_cast<idx_t>(sel_copy),
-				                                                result_count, active_lop->children[0]->out_start);
+
+				vector<vector<idx_t>> result_sel_vector = ChangeSelToBitMap(sel.data(), result_count, CompressionMethod::LZ4);
+
+				vector<idx_t> &bitmap_vector = result_sel_vector[0];
+				vector<idx_t> &bitmap_sizes = result_sel_vector[1];
+				vector<idx_t> &bitmap_is_compressed = result_sel_vector[2];
+				vector<idx_t> &use_bitmap = result_sel_vector[3];
+
+				active_log->compressed_join_gather_log.PushBack(0, 0, bitmap_vector, bitmap_sizes,
+				                                                bitmap_is_compressed,bitmap_vector.size(), result_count,
+				                                                active_lop->children[0]->out_start, use_bitmap[0]);
+
 			} else {
 				unique_ptr<sel_t[]> sel_copy(new sel_t[result_count]);
 				std::copy(sel.data(), sel.data() + result_count, sel_copy.get());
@@ -798,12 +816,27 @@ void ScanStructure::NextLeftJoin(DataChunk &keys, DataChunk &left, DataChunk &re
 			if (lineage_manager->capture && active_log) {
 				if (lineage_manager->compress){
 					sel_t* sel_copy = nullptr;
+
+					vector<vector<idx_t>> result_sel_vector;
+					vector<idx_t> bitmap_vector;
+					vector<idx_t> bitmap_sizes;
+					vector<idx_t> bitmap_is_compressed;
+					idx_t use_bitmap = 0;
+
 					if (remaining_count < STANDARD_VECTOR_SIZE) {
-						sel_copy = new sel_t[remaining_count];
-						std::copy(sel.data(), sel.data() + remaining_count, sel_copy);
+
+						result_sel_vector = ChangeSelToBitMap(sel.data(), remaining_count, CompressionMethod::LZ4);
+
+						bitmap_vector = result_sel_vector[0];
+						bitmap_sizes = result_sel_vector[1];
+						bitmap_is_compressed = result_sel_vector[2];
+						use_bitmap = result_sel_vector[3][0];
+
 					}
-					active_log->compressed_join_gather_log.PushBack(0, reinterpret_cast<idx_t>(sel_copy),
-					                                                remaining_count, active_lop->children[0]->out_start);
+					active_log->compressed_join_gather_log.PushBack(0, 0, bitmap_vector, bitmap_sizes,
+					                                                bitmap_is_compressed,bitmap_vector.size(), remaining_count,
+					                                                active_lop->children[0]->out_start, use_bitmap);
+
 				} else {
 					unique_ptr<sel_t[]> sel_copy = nullptr;
 					if (remaining_count < STANDARD_VECTOR_SIZE) {
@@ -875,12 +908,23 @@ void ScanStructure::NextSingleJoin(DataChunk &keys, DataChunk &input, DataChunk 
     	if (lineage_manager->compress){
 			data_ptr_t* rhs_ptrs = new data_ptr_t[result_count];
 			std::copy(ptrs, ptrs + result_count , rhs_ptrs);
-			sel_t* sel_copy = new sel_t[result_count];
-			std::copy(result_sel.data(), result_sel.data() + result_count, sel_copy);
 
-			active_log->compressed_join_gather_log.PushBack(reinterpret_cast<idx_t>(rhs_ptrs),
-			                                                reinterpret_cast<idx_t>(sel_copy),
-			                                                result_count, active_lop->children[0]->out_start);
+			idx_t use_rle = GetUseRle(rhs_ptrs, result_count);
+			data_ptr_t* compressed_rhs_ptrs = ChangeAddressToRLEBitpack(rhs_ptrs, result_count, use_rle);
+			delete[] rhs_ptrs;
+
+			vector<vector<idx_t>> result_sel_vector = ChangeSelToBitMap(result_sel.data(), result_count, CompressionMethod::LZ4);
+
+			vector<idx_t> &bitmap_vector = result_sel_vector[0];
+			vector<idx_t> &bitmap_sizes = result_sel_vector[1];
+			vector<idx_t> &bitmap_is_compressed = result_sel_vector[2];
+			vector<idx_t> &use_bitmap = result_sel_vector[3];
+
+			active_log->compressed_join_gather_log.PushBack(reinterpret_cast<idx_t>(compressed_rhs_ptrs), use_rle,
+			                                                bitmap_vector, bitmap_sizes, bitmap_is_compressed,
+			                                                bitmap_vector.size(), result_count,
+			                                                active_lop->children[0]->out_start, use_bitmap[0]);
+
 		} else {
 			unique_ptr<data_ptr_t[]> rhs_ptrs(new data_ptr_t[result_count]);
 			std::copy(ptrs, ptrs + result_count , rhs_ptrs.get());
@@ -964,8 +1008,20 @@ void JoinHashTable::ScanFullOuter(JoinHTScanState &state, Vector &addresses, Dat
 			data_ptr_t* rhs_ptrs = new data_ptr_t[found_entries];
 			std::copy(key_locations, key_locations + found_entries, rhs_ptrs);
 
-			active_log->compressed_join_gather_log.PushBack(reinterpret_cast<idx_t>(rhs_ptrs), 0,
-			                                                 found_entries, active_lop->children[0]->out_start);
+			idx_t use_rle = GetUseRle(rhs_ptrs, found_entries);
+			data_ptr_t* compressed_rhs_ptrs = ChangeAddressToRLEBitpack(rhs_ptrs, found_entries, use_rle);
+			delete[] rhs_ptrs;
+
+			vector<vector<idx_t>> result_sel_vector;
+			vector<idx_t> bitmap_vector;
+			vector<idx_t> bitmap_sizes;
+			vector<idx_t> bitmap_is_compressed;
+
+			active_log->compressed_join_gather_log.PushBack(reinterpret_cast<idx_t>(compressed_rhs_ptrs), use_rle,
+			                                                bitmap_vector, bitmap_sizes, bitmap_is_compressed,
+			                                                bitmap_vector.size(), found_entries,
+			                                                active_lop->children[0]->out_start, 0);
+
 		} else {
 			unique_ptr<data_ptr_t[]> rhs_ptrs(new data_ptr_t[found_entries]);
 			std::copy(key_locations, key_locations + found_entries, rhs_ptrs.get());

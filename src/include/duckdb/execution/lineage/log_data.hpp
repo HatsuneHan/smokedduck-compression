@@ -84,7 +84,7 @@ struct join_gather_artifact {
 	unique_ptr<data_ptr_t[]> rhs;
 	unique_ptr<sel_t[]> lhs;
 	idx_t count;
-  idx_t in_start;
+	idx_t in_start;
 };
 
 struct perfect_full_scan_ht_artifact {
