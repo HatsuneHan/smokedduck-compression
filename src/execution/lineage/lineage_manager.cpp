@@ -892,10 +892,14 @@ size_t LineageManager::GetCompressedArtifactSize() {
 
 				for(size_t i = 0; i < curr_log->compressed_combine_log.size; i++){
 					if(curr_log->compressed_combine_log.artifacts->src[i] != 0){
-						tmp_combine_log_buffer_size += sizeof(data_ptr_t) * curr_log->compressed_combine_log.artifacts->count[i]; // src
+						tmp_combine_log_buffer_size += GetAddressDeltaRLESize(
+						    reinterpret_cast<data_ptr_t*>(curr_log->compressed_combine_log.artifacts->src[i]),
+						                                   curr_log->compressed_combine_log.artifacts->count[i]);
 					}
 					if(curr_log->compressed_combine_log.artifacts->target[i] != 0){
-						tmp_combine_log_buffer_size += sizeof(data_ptr_t) * curr_log->compressed_combine_log.artifacts->count[i]; // dst
+						tmp_combine_log_buffer_size += GetAddressDeltaRLESize(
+						    reinterpret_cast<data_ptr_t*>(curr_log->compressed_combine_log.artifacts->target[i]),
+						                                   curr_log->compressed_combine_log.artifacts->count[i]);
 					}
 				}
 

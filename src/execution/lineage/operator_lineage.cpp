@@ -175,13 +175,26 @@ void OperatorLineage::PostProcess() {
 		  }
 		  for (size_t k=0; k < log[tkey]->compressed_combine_log.size; ++k) {
 			  idx_t res_count = log[tkey]->compressed_combine_log.artifacts->count[k];
-			  auto src = reinterpret_cast<data_ptr_t*>(log[tkey]->compressed_combine_log.artifacts->src[k]);
-			  auto target = reinterpret_cast<data_ptr_t*>(log[tkey]->compressed_combine_log.artifacts->target[k]);
+
+			  data_ptr_t* compressed_src = reinterpret_cast<data_ptr_t*>(log[tkey]->compressed_combine_log.artifacts->src[k]);
+			  data_ptr_t* src = ChangeDeltaRLEToAddress(compressed_src, res_count);
+
+			  data_ptr_t* compressed_target = reinterpret_cast<data_ptr_t*>(log[tkey]->compressed_combine_log.artifacts->target[k]);
+			  data_ptr_t* target = ChangeDeltaRLEToAddress(compressed_target, res_count);
+
 			  for (idx_t j=0; j < res_count; ++j) {
 				  log_index->codes[src[j]] = log_index->codes[target[j]];
 			  }
+
+			  if(res_count > 8){
+				  delete[] src;
+				  delete[] target;
+			  }
+
 		  }
+
 //		  log[tkey]->compressed_combine_log.Clear();
+
 	  } else {
 		  if (log.count(tkey) == 0 || log[tkey]->combine_log.empty()){
 			  continue;

@@ -1014,6 +1014,170 @@ namespace duckdb {
 	    return use_rle;
     }
 
+    data_ptr_t* ChangeAddressToDeltaRLE(data_ptr_t* address_data, idx_t count){
+
+	    if(count <= 8){
+		    data_ptr_t* address_data_copy = new data_ptr_t[count];
+		    std::copy(address_data, address_data + count, address_data_copy);
+
+		    return address_data_copy;
+	    }
+
+	    vector<Compressed64ListDelta*> compressed_delta_list;
+
+	    idx_t start_idx = 0;
+	    idx_t curr_base = reinterpret_cast<idx_t>(address_data[start_idx]);
+	    while(reinterpret_cast<idx_t>(address_data[start_idx+1]) < reinterpret_cast<idx_t>(address_data[start_idx])){
+		    // print all address_data
+		    Compressed64ListDelta* compressed_delta = new Compressed64ListDelta(reinterpret_cast<idx_t*>(address_data), 0, curr_base);
+		    compressed_delta_list.push_back(compressed_delta);
+
+		    start_idx++;
+		    curr_base = reinterpret_cast<idx_t>(address_data[start_idx]);
+	    }
+
+	    vector<idx_t> delta_rle_vector;
+	    idx_t prev_delta = reinterpret_cast<idx_t>(address_data[start_idx+1]) - reinterpret_cast<idx_t>(address_data[start_idx]);
+	    idx_t curr_rle = 1;
+
+	    for(size_t i = start_idx+2; i < count; i++){
+		    // guaranteed in the code when generating address_data, it is in ascending order
+		    bool change_order = false;
+		    while(i < count && (reinterpret_cast<idx_t>(address_data[i]) < reinterpret_cast<idx_t>(address_data[i-1]))){
+			    change_order = true;
+			    if(curr_rle){
+				    delta_rle_vector.push_back(prev_delta);
+				    delta_rle_vector.push_back(curr_rle);
+
+				    idx_t *delta_rle = new idx_t[delta_rle_vector.size()];
+				    std::copy(delta_rle_vector.begin(), delta_rle_vector.end(), delta_rle);
+
+				    Compressed64ListDelta* compressed_delta = new Compressed64ListDelta(delta_rle, delta_rle_vector.size(), curr_base);
+				    compressed_delta_list.push_back(compressed_delta);
+
+				    delete[] delta_rle;
+
+				    delta_rle_vector.clear();
+				    curr_base = reinterpret_cast<idx_t>(address_data[i]);
+				    curr_rle = 0;
+
+			    } else{
+				    Compressed64ListDelta* compressed_delta = new Compressed64ListDelta(reinterpret_cast<idx_t*>(address_data), 0, curr_base);
+				    compressed_delta_list.push_back(compressed_delta);
+
+				    delta_rle_vector.clear();
+				    curr_base = reinterpret_cast<idx_t>(address_data[i]);
+				    curr_rle = 0;
+			    }
+
+			    i++;
+		    }
+
+		    if(change_order){
+			    prev_delta = reinterpret_cast<idx_t>(address_data[i]) - reinterpret_cast<idx_t>(address_data[i-1]);
+			    curr_rle = 1;
+
+			    continue;
+		    }
+
+		    idx_t delta = reinterpret_cast<idx_t>(address_data[i]) - reinterpret_cast<idx_t>(address_data[i-1]);
+		    if(delta == prev_delta){
+			    curr_rle++;
+		    } else {
+			    delta_rle_vector.push_back(prev_delta);
+			    delta_rle_vector.push_back(curr_rle);
+
+			    prev_delta = delta;
+			    curr_rle = 1;
+		    }
+	    }
+
+	    if(curr_rle){
+		    delta_rle_vector.push_back(prev_delta);
+		    delta_rle_vector.push_back(curr_rle);
+		    idx_t *delta_rle = new idx_t[delta_rle_vector.size()];
+		    std::copy(delta_rle_vector.begin(), delta_rle_vector.end(), delta_rle);
+
+		    Compressed64ListDelta* compressed_delta = new Compressed64ListDelta(delta_rle, delta_rle_vector.size(), curr_base);
+		    compressed_delta_list.push_back(compressed_delta);
+
+		    delete[] delta_rle;
+
+	    } else {
+		    Compressed64ListDelta* compressed_delta = new Compressed64ListDelta(reinterpret_cast<idx_t*>(address_data), 0, curr_base);
+		    compressed_delta_list.push_back(compressed_delta);
+	    }
+
+	    Compressed64ListDelta** compressed_delta_list_array = new Compressed64ListDelta*[compressed_delta_list.size()];
+	    std::copy(compressed_delta_list.begin(), compressed_delta_list.end(), compressed_delta_list_array);
+
+		return reinterpret_cast<data_ptr_t*>(compressed_delta_list_array);
+	}
+
+    data_ptr_t* ChangeDeltaRLEToAddress(data_ptr_t* compressed_list, idx_t count){
+
+	    if(count <= 8){
+		    return compressed_list;
+	    }
+
+	    Compressed64ListDelta** compressed_delta_list = reinterpret_cast<Compressed64ListDelta**>(compressed_list);
+	    data_ptr_t* address_data = new data_ptr_t[count];
+
+	    idx_t index = 0;
+	    idx_t ptr_index = 0;
+
+	    while(index < count){
+		    Compressed64ListDelta* compressed_delta = compressed_delta_list[ptr_index];
+		    address_data[index] = reinterpret_cast<data_ptr_t>(compressed_delta->delta_base);
+		    index++;
+
+		    for(size_t i = 0; i < compressed_delta->size; i += 2){
+			    idx_t delta = compressed_delta->Get(i);
+			    idx_t rle = compressed_delta->Get(i+1);
+
+			    for(size_t j = 0; j < rle; j++){
+				    address_data[index] = reinterpret_cast<data_ptr_t>(reinterpret_cast<idx_t>(address_data[index-1]) + delta);
+				    index++;
+			    }
+		    }
+
+		    ptr_index++;
+	    }
+
+	    return address_data;
+	}
+
+	size_t GetAddressDeltaRLESize(data_ptr_t* compressed_list, idx_t count){
+
+	    if(count <= 8){
+		    return sizeof(data_ptr_t) * count;
+	    }
+
+	    Compressed64ListDelta** compressed_delta_list = reinterpret_cast<Compressed64ListDelta**>(compressed_list);
+
+	    idx_t index = 0;
+	    idx_t ptr_index = 0;
+
+	    while(index < count){
+		    Compressed64ListDelta* compressed_delta = compressed_delta_list[ptr_index];
+		    index++;
+
+		    for(size_t i = 0; i < compressed_delta->size; i += 2){
+			    idx_t rle = compressed_delta->Get(i+1);
+			    index += rle;
+		    }
+
+		    ptr_index++;
+	    }
+
+	    size_t total_size = 0;
+
+	    for(size_t i = 0; i < ptr_index; i++){
+		    total_size += compressed_delta_list[i]->GetBytesSize();
+	    }
+
+	    return total_size;
+	}
 }
 
 #endif

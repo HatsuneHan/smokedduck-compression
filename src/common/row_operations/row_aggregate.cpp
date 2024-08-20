@@ -88,14 +88,12 @@ void RowOperations::CombineStates(RowOperationsState &state, TupleDataLayout &la
 		auto target_ptrs = FlatVector::GetData<data_ptr_t>(targets);
 
 		if (lineage_manager->compress){
-			data_ptr_t* src_copy = new data_ptr_t[count];
-			std::copy(src_ptrs, src_ptrs + count , src_copy);
 
-			data_ptr_t* target_copy = new data_ptr_t[count];
-			std::copy(target_ptrs, target_ptrs + count , target_copy);
+			data_ptr_t* src_ptrs_compressed = ChangeAddressToDeltaRLE(src_ptrs, count);
+			data_ptr_t* target_ptrs_compressed = ChangeAddressToDeltaRLE(target_ptrs, count);
 
-			active_log->compressed_combine_log.PushBack(reinterpret_cast<idx_t>(src_copy),
-			                                            reinterpret_cast<idx_t>(target_copy),
+			active_log->compressed_combine_log.PushBack(reinterpret_cast<idx_t>(src_ptrs_compressed),
+			                                            reinterpret_cast<idx_t>(target_ptrs_compressed),
 			                                            count);
 
 		} else {

@@ -71,6 +71,9 @@ data_ptr_t* ChangeRLEBitpackToAddress(data_ptr_t*, idx_t, idx_t);
 size_t GetAddressRLEBitpackSize(data_ptr_t*, idx_t, idx_t);
 idx_t GetUseRle(data_ptr_t*, idx_t);
 
+data_ptr_t* ChangeAddressToDeltaRLE(data_ptr_t*, idx_t);
+data_ptr_t* ChangeDeltaRLEToAddress(data_ptr_t*, idx_t);
+size_t GetAddressDeltaRLESize(data_ptr_t*, idx_t);
 // use to replace vector<idx_t>
 
 class Compressed64List{
@@ -500,21 +503,29 @@ public:
 
 	// Destructor
 	~CompressedCombineArtifactList() {
-		for (size_t i = 0; i < size; i++) {
-			data_ptr_t* src_addr = reinterpret_cast<data_ptr_t*>(artifacts->src[i]);
-			data_ptr_t* target_addr = reinterpret_cast<data_ptr_t*>(artifacts->target[i]);
-			delete[] src_addr;
-			delete[] target_addr;
+		if(artifacts != nullptr){
+			for (size_t i = 0; i < size; i++) {
+				idx_t res_count = artifacts->count[i];
+				if(res_count <= 8){
+					delete[] reinterpret_cast<data_ptr_t*>(artifacts->src[i]);
+				} else {
+					delete[] reinterpret_cast<Compressed64ListWithSize**>(artifacts->src[i]);
+				}
+			}
 		}
 		delete artifacts;
 	}
 
 	void Clear(){
-		for (size_t i = 0; i < size; i++) {
-			data_ptr_t* src_addr = reinterpret_cast<data_ptr_t*>(artifacts->src[i]);
-			data_ptr_t* target_addr = reinterpret_cast<data_ptr_t*>(artifacts->target[i]);
-			delete[] src_addr;
-			delete[] target_addr;
+		if(artifacts != nullptr){
+			for (size_t i = 0; i < size; i++) {
+				idx_t res_count = artifacts->count[i];
+				if(res_count <= 8){
+					delete[] reinterpret_cast<data_ptr_t*>(artifacts->src[i]);
+				} else {
+					delete[] reinterpret_cast<Compressed64ListWithSize**>(artifacts->src[i]);
+				}
+			}
 		}
 		delete artifacts;
 		artifacts = nullptr;

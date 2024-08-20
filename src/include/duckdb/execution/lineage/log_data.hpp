@@ -165,7 +165,7 @@ public:
 
   	vector<vector<idx_t>> reorder_log;
 	vector<CompressedReorderLogArtifactList> compressed_reorder_log;
-//
+
   	vector<cross_artifact> cross_log;
 	CompressedCrossArtifactList compressed_cross_log;
 
