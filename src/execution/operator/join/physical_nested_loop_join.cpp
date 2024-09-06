@@ -417,17 +417,20 @@ OperatorResultType PhysicalNestedLoopJoin::ResolveComplexJoin(ExecutionContext &
 #ifdef LINEAGE
       if (lineage_manager->capture && active_log) {
         if (lineage_manager->compress){
-			sel_t* lvector_copy = new sel_t[match_count];
-			std::copy(lvector.sel_data()->owned_data.get(), lvector.sel_data()->owned_data.get() + match_count, lvector_copy);
 
-			sel_t* rvector_copy = new sel_t[match_count];
-			std::copy(rvector.sel_data()->owned_data.get(), rvector.sel_data()->owned_data.get() + match_count, rvector_copy);
+			vector<vector<idx_t>> result_vector = ChangeSelToBitMap(lvector.sel_data()->owned_data.get(), match_count, CompressionMethod::LZ4);
 
-			active_log->compressed_nlj_log.PushBack(reinterpret_cast<idx_t>(lvector_copy),
-					                                reinterpret_cast<idx_t>(rvector_copy),
-					                                match_count,
-				                                  state.condition_scan_state.current_row_index,
-					                                active_lop->children[0]->out_start);
+			vector<idx_t> &bitmap_vector = result_vector[0];
+			vector<idx_t> &bitmap_sizes = result_vector[1];
+			vector<idx_t> &bitmap_is_compressed = result_vector[2];
+			vector<idx_t> &use_bitmap = result_vector[3];
+
+			idx_t* compressed_rvector = ChangeSelDataToRLE(rvector.sel_data()->owned_data.get(), match_count);
+
+			active_log->compressed_nlj_log.PushBack(bitmap_vector, bitmap_sizes, bitmap_is_compressed,
+			                                        bitmap_vector.size(), reinterpret_cast<idx_t>(compressed_rvector),
+					                                match_count,state.condition_scan_state.current_row_index,
+			                                        active_lop->children[0]->out_start, use_bitmap[0]);
 
 			active_log->SetLatestLSN({active_log->compressed_nlj_log.size, 0});
 

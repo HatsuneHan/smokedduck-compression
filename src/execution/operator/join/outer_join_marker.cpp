@@ -66,11 +66,18 @@ void OuterJoinMarker::ConstructLeftJoinResult(DataChunk &left, DataChunk &result
 #ifdef LINEAGE
     if (lineage_manager->capture && active_log) {
       if(lineage_manager->compress){
-		  sel_t* remaining_sel_copy = new sel_t[remaining_count];
-		  std::copy(remaining_sel.sel_data()->owned_data.get(), remaining_sel.sel_data()->owned_data.get() + remaining_count, remaining_sel_copy);
-		  active_log->compressed_nlj_log.PushBack(reinterpret_cast<idx_t>(remaining_sel_copy),
-				                                  0, remaining_count, 0,
-				                                  active_lop->children[0]->out_start);
+
+		  vector<vector<idx_t>> result_vector = ChangeSelToBitMap(remaining_sel.sel_data()->owned_data.get(), remaining_count, CompressionMethod::LZ4);
+
+		  vector<idx_t> &bitmap_vector = result_vector[0];
+		  vector<idx_t> &bitmap_sizes = result_vector[1];
+		  vector<idx_t> &bitmap_is_compressed = result_vector[2];
+		  vector<idx_t> &use_bitmap = result_vector[3];
+
+		  active_log->compressed_nlj_log.PushBack(bitmap_vector, bitmap_sizes, bitmap_is_compressed,
+				                                  bitmap_vector.size(), 0,remaining_count,0,
+				                                  active_lop->children[0]->out_start, use_bitmap[0]);
+
 	  } else {
 		  active_log->nlj_log.push_back({remaining_sel.sel_data(), nullptr, remaining_count,
 				                         0, active_lop->children[0]->out_start});

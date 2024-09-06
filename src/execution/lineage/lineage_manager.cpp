@@ -1022,12 +1022,18 @@ size_t LineageManager::GetCompressedArtifactSize() {
 
 				tmp_nlj_log_element_size += curr_log->compressed_nlj_log.GetBytesSize();
 
-				for(size_t i = 0; i < curr_log->compressed_nlj_log.size; i++){
-					if(curr_log->compressed_nlj_log.artifacts->left[i] != 0){
-						tmp_nlj_log_buffer_size += sizeof(sel_t) * curr_log->compressed_nlj_log.artifacts->count[i];
+				if(curr_log->compressed_nlj_log.size != 0){
+					idx_t total_bitmap_num = curr_log->compressed_nlj_log.artifacts->start_bitmap_idx[curr_log->compressed_nlj_log.size];
+
+					for(size_t i = 0; i < total_bitmap_num; i++){
+						tmp_nlj_log_buffer_size += curr_log->compressed_nlj_log.artifacts->bitmap_size[i]; // sel_size
 					}
+				}
+
+				for(size_t i = 0; i < curr_log->compressed_nlj_log.size; i++){
 					if(curr_log->compressed_nlj_log.artifacts->right[i] != 0){
-						tmp_nlj_log_buffer_size += sizeof(sel_t) * curr_log->compressed_nlj_log.artifacts->count[i];
+						tmp_nlj_log_buffer_size += GetRLESize(reinterpret_cast<idx_t*>(curr_log->compressed_nlj_log.artifacts->right[i]),
+						                                      curr_log->compressed_nlj_log.artifacts->count[i]);
 					}
 				}
 

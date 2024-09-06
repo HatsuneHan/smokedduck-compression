@@ -20,26 +20,7 @@ void OperatorLineage::PostProcess() {
 		  if (log.count(tkey) == 0 || log[tkey]->compressed_filter_log.size == 0){
 			  continue;
 		  }
-
-		  for (size_t k=0; k < log[tkey]->compressed_filter_log.size; ++k) {
-			  idx_t res_count = log[tkey]->compressed_filter_log.artifacts->count[k];
-			  idx_t offset = log[tkey]->compressed_filter_log.artifacts->in_start[k];
-			  idx_t use_bitmap = log[tkey]->compressed_filter_log.artifacts->use_bitmap[k];
-			  idx_t start_bitmap_idx = log[tkey]->compressed_filter_log.artifacts->start_bitmap_idx[k];
-			  idx_t bitmap_num = log[tkey]->compressed_filter_log.artifacts->start_bitmap_idx[k+1] - start_bitmap_idx;
-
-			  if (bitmap_num) {
-				  if (use_bitmap) {
-					  continue;
-				  } else {
-					  idx_t ptr_num = log[tkey]->compressed_filter_log.artifacts->bitmap[start_bitmap_idx];
-					  auto payload = reinterpret_cast<sel_t*>(ptr_num);
-					  for (idx_t j=0; j < res_count; ++j) {
-						  payload[j] += offset;
-					  }
-				  }
-			  }
-		  }
+		  // postprocess during decompression in GetLineageAsChunkLocal
 	  } else {
 		  if (log.count(tkey) == 0 || log[tkey]->filter_log.empty()){
 			  continue;
@@ -70,28 +51,7 @@ void OperatorLineage::PostProcess() {
 		  if (log.count(tkey) == 0 || log[tkey]->compressed_row_group_log.size == 0) {
 			  continue;
 		  }
-		  for (size_t k=0; k < log[tkey]->compressed_row_group_log.size; ++k) {
-			  idx_t res_count = log[tkey]->compressed_row_group_log.artifacts->count[k];
-			  idx_t offset = log[tkey]->compressed_row_group_log.artifacts->start[k]
-					         + log[tkey]->compressed_row_group_log.artifacts->vector_index[k];
-
-			  idx_t use_bitmap = log[tkey]->compressed_row_group_log.artifacts->use_bitmap[k];
-			  idx_t start_bitmap_idx = log[tkey]->compressed_row_group_log.artifacts->start_bitmap_idx[k];
-			  idx_t bitmap_num = log[tkey]->compressed_row_group_log.artifacts->start_bitmap_idx[k+1] - start_bitmap_idx;
-
-			  if (bitmap_num) {
-				  if (use_bitmap) {
-					  continue;
-				  } else {
-					  idx_t ptr_num = log[tkey]->compressed_row_group_log.artifacts->bitmap[start_bitmap_idx];
-					  auto payload = reinterpret_cast<sel_t*>(ptr_num);
-					  for (idx_t j=0; j < res_count; ++j) {
-						  payload[j] += offset;
-					  }
-				  }
-			  }
-
-		  }
+		  // postprocess during decompression in GetLineageAsChunkLocal
 	  }else{
 		  if (log.count(tkey) == 0 || log[tkey]->row_group_log.empty()){
 			  continue;
@@ -523,28 +483,7 @@ void OperatorLineage::PostProcess() {
 		  if (log.count(tkey) == 0 || log[tkey]->compressed_nlj_log.size == 0){
 			  continue;
 		  }
-		  for (size_t k=0; k < log[tkey]->compressed_nlj_log.size; ++k) {
-			  idx_t count = log[tkey]->compressed_nlj_log.artifacts->count[k];
-			  idx_t offset = log[tkey]->compressed_nlj_log.artifacts->out_start[k];
-
-			  idx_t left_addr_num = log[tkey]->compressed_nlj_log.artifacts->left[k];
-			  if (left_addr_num != 0) {
-				  auto vec_ptr = reinterpret_cast<sel_t*>(left_addr_num);
-				  for (idx_t j=0; j < count; j++) {
-					  *(vec_ptr + j) += offset;
-				  }
-			  }
-
-			  idx_t current_row_index = log[tkey]->compressed_nlj_log.artifacts->current_row_index[k];
-
-			  idx_t right_addr_num = log[tkey]->compressed_nlj_log.artifacts->right[k];
-			  if (right_addr_num != 0 && current_row_index != 0) {
-				  auto vec_ptr = reinterpret_cast<sel_t*>(right_addr_num);
-				  for (idx_t j=0; j < count; j++) {
-					  *(vec_ptr + j) += current_row_index;
-				  }
-			  }
-		  }
+		  // postprocess during decompression in GetLineageAsChunkLocal
 	  } else {
 		  if (log.count(tkey) == 0 || log[tkey]->nlj_log.empty()){
 			  continue;
@@ -813,8 +752,10 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
     Vector rhs_payload(LogicalType::INTEGER, count);
 
 	if(lineage_manager->compress){
-		idx_t left_addr_num = log->compressed_nlj_log.artifacts->left[lsn];
-		if (left_addr_num) {
+		idx_t offset = log->compressed_nlj_log.artifacts->out_start[lsn];
+		sel_t* left_addr_num = ChangeBitMapToSel(log->compressed_nlj_log.artifacts, offset, lsn);
+
+		if (left_addr_num != nullptr) {
 			data_ptr_t left_ptr = reinterpret_cast<data_ptr_t>(left_addr_num);
 			Vector temp(LogicalType::INTEGER, left_ptr);
 			lhs_payload.Reference(temp);
@@ -823,9 +764,15 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
 			ConstantVector::SetNull(lhs_payload, true);
 		}
 
-		idx_t right_addr_num = log->compressed_nlj_log.artifacts->right[lsn];
-		if (right_addr_num) {
+		idx_t compressed_right_addr_num = log->compressed_nlj_log.artifacts->right[lsn];
+
+		if (compressed_right_addr_num) {
+			idx_t match_count = log->compressed_nlj_log.artifacts->count[lsn];
+			idx_t right_offset = log->compressed_nlj_log.artifacts->current_row_index[lsn];
+
+			sel_t* right_addr_num = ChangeRLEToSelData(reinterpret_cast<idx_t*>(compressed_right_addr_num), match_count, right_offset);
 			data_ptr_t right_ptr = reinterpret_cast<data_ptr_t>(right_addr_num);
+
 			Vector temp(LogicalType::INTEGER, right_ptr);
 			rhs_payload.Reference(temp);
 		} else {

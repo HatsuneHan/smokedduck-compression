@@ -74,6 +74,11 @@ idx_t GetUseRle(data_ptr_t*, idx_t);
 data_ptr_t* ChangeAddressToDeltaRLE(data_ptr_t*, idx_t);
 data_ptr_t* ChangeDeltaRLEToAddress(data_ptr_t*, idx_t);
 size_t GetAddressDeltaRLESize(data_ptr_t*, idx_t);
+
+idx_t* ChangeSelDataToRLE(sel_t*, idx_t);
+sel_t* ChangeRLEToSelData(idx_t*, idx_t, idx_t);
+size_t GetRLESize(idx_t*, idx_t);
+
 // use to replace vector<idx_t>
 
 class Compressed64List{
@@ -1267,11 +1272,19 @@ public:
 };
 
 struct CompressedNljArtifacts{
-	Compressed64List left;
+	// bitmap for left
+	Compressed64List bitmap;
+	Compressed64List bitmap_size;
+	Compressed64List bitmap_is_compressed;
+	Compressed64List start_bitmap_idx;
+
 	Compressed64List right;
+
 	Compressed64List count;
 	Compressed64List current_row_index;
 	Compressed64List out_start;
+
+	Compressed64List use_bitmap;
 };
 
 class CompressedNLJArtifactList{
@@ -1282,37 +1295,96 @@ public:
 
 	// Destructor
 	~CompressedNLJArtifactList() {
-		for (size_t i = 0; i < size; i++) {
-			sel_t* left_addr = reinterpret_cast<sel_t*>(artifacts->left[i]);
-			sel_t* right_addr = reinterpret_cast<sel_t*>(artifacts->right[i]);
-			delete[] left_addr;
-			delete[] right_addr;
+		if(artifacts != nullptr){
+			for(size_t i = 0; i < size; i++){
+				idx_t start_bitmap_idx = artifacts->start_bitmap_idx[i];
+				idx_t bitmap_num = artifacts->start_bitmap_idx[i + 1] - start_bitmap_idx;
+
+				for(size_t j = 0; j < bitmap_num; j++){
+					if(artifacts->count[i] >= 32){
+						unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[start_bitmap_idx + j]);
+						delete[] sel_addr;
+					} else {
+						sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx + j]);
+						delete[] sel_addr;
+					}
+				}
+			}
+
+			for (size_t i = 0; i < size; i++) {
+				if(artifacts->count[i] <= 4){
+					sel_t* right_addr = reinterpret_cast<sel_t*>(artifacts->right[i]);
+					delete[] right_addr;
+				} else {
+					idx_t* right_addr = reinterpret_cast<idx_t*>(artifacts->right[i]);
+					delete[] right_addr;
+				}
+			}
 		}
+
 		delete artifacts;
 	}
 
 	void Clear(){
-		for (size_t i = 0; i < size; i++) {
-			sel_t* left_addr = reinterpret_cast<sel_t*>(artifacts->left[i]);
-			sel_t* right_addr = reinterpret_cast<sel_t*>(artifacts->right[i]);
-			delete[] left_addr;
-			delete[] right_addr;
+		if(artifacts != nullptr){
+			for(size_t i = 0; i < size; i++){
+				idx_t start_bitmap_idx = artifacts->start_bitmap_idx[i];
+				idx_t bitmap_num = artifacts->start_bitmap_idx[i + 1] - start_bitmap_idx;
+
+				for(size_t j = 0; j < bitmap_num; j++){
+					if(artifacts->count[i] >= 32){
+						unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[start_bitmap_idx + j]);
+						delete[] sel_addr;
+					} else {
+						sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx + j]);
+						delete[] sel_addr;
+					}
+				}
+			}
+
+			for (size_t i = 0; i < size; i++) {
+				if(artifacts->count[i] <= 4){
+					sel_t* right_addr = reinterpret_cast<sel_t*>(artifacts->right[i]);
+					delete[] right_addr;
+				} else {
+					idx_t* right_addr = reinterpret_cast<idx_t*>(artifacts->right[i]);
+					delete[] right_addr;
+				}
+			}
 		}
+
 		delete artifacts;
 		artifacts = nullptr;
 		size = 0;
 	}
 
-	void PushBack(idx_t left_p, idx_t right_p, idx_t count_p, idx_t current_row_index_p, idx_t out_start_p){
+	void PushBack(const vector<idx_t>& bitmap_p, const vector<idx_t>& bitmap_size_p,
+	              const vector<idx_t>& bitmap_is_compressed_p, const idx_t bitmap_num_p,
+	              idx_t right_p, idx_t count_p, idx_t current_row_index_p,
+	              idx_t out_start_p, idx_t use_bitmap_p){
+
 		if (size == 0) {
 			artifacts = new CompressedNljArtifacts();
+			artifacts->start_bitmap_idx.PushBack(0, size);
 		}
 
-		this->artifacts->left.PushBack(left_p, size);
-		this->artifacts->right.PushBack(right_p, size);
-		this->artifacts->count.PushBack(count_p, size);
-		this->artifacts->current_row_index.PushBack(current_row_index_p, size);
-		this->artifacts->out_start.PushBack(out_start_p, size);
+		idx_t curr_total_bitmap_num = artifacts->start_bitmap_idx[size];
+
+		for(size_t i = 0; i < bitmap_num_p; i++){
+			artifacts->bitmap.PushBack(bitmap_p[i], curr_total_bitmap_num);
+			artifacts->bitmap_size.PushBack(bitmap_size_p[i], curr_total_bitmap_num);
+			artifacts->bitmap_is_compressed.PushBack(bitmap_is_compressed_p[i], curr_total_bitmap_num);
+			curr_total_bitmap_num += 1;
+		}
+
+		artifacts->start_bitmap_idx.PushBack(curr_total_bitmap_num, size + 1);
+
+		artifacts->right.PushBack(right_p, size);
+		artifacts->count.PushBack(count_p, size);
+		artifacts->current_row_index.PushBack(current_row_index_p, size);
+		artifacts->out_start.PushBack(out_start_p, size);
+
+		artifacts->use_bitmap.PushBack(use_bitmap_p, size);
 
 		size++;
 	}
@@ -1321,11 +1393,15 @@ public:
 		if(size == 0){
 			return sizeof(CompressedNLJArtifactList);
 		} else {
-			return this->artifacts->left.GetBytesSize()
+			return this->artifacts->bitmap.GetBytesSize()
+			       + this->artifacts->bitmap_size.GetBytesSize()
+			       + this->artifacts->bitmap_is_compressed.GetBytesSize()
+			       + this->artifacts->start_bitmap_idx.GetBytesSize()
 			       + this->artifacts->right.GetBytesSize()
 			       + this->artifacts->count.GetBytesSize()
 			       + this->artifacts->current_row_index.GetBytesSize()
 			       + this->artifacts->out_start.GetBytesSize()
+			       + this->artifacts->use_bitmap.GetBytesSize()
 			       + sizeof(CompressedNLJArtifactList);
 		}
 	}

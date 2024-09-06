@@ -504,7 +504,11 @@ namespace duckdb {
 			    return sel_copy;
 		    }
 		    else {
-			    return reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx]);
+			    sel_t* bitmap_sel = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx]);
+			    for(size_t i = 0; i < count; i++){
+				    bitmap_sel[i] += offset;
+			    }
+			    return bitmap_sel;
 		    }
 	    }
 
@@ -1178,6 +1182,92 @@ namespace duckdb {
 
 	    return total_size;
 	}
+
+
+    idx_t* ChangeSelDataToRLE(sel_t* sel_data, idx_t key_count){
+
+	    if(key_count <= 4){
+		    sel_t* sel_data_copy = new sel_t[key_count];
+		    std::copy(sel_data, sel_data + key_count, sel_data_copy);
+		    return reinterpret_cast<idx_t*>(sel_data_copy);
+	    }
+
+	    vector<idx_t> rle_vector;
+
+	    // we should store the first element
+	    idx_t prev_val = sel_data[0];
+	    idx_t curr_rle = 1;
+
+	    for(size_t i = 1; i < key_count; i++) {
+		    idx_t curr_val = sel_data[i];
+
+		    if (curr_val == prev_val) {
+			    curr_rle++;
+		    } else {
+			    rle_vector.push_back(prev_val);
+			    rle_vector.push_back(curr_rle);
+
+			    prev_val = curr_val;
+			    curr_rle = 1;
+		    }
+	    }
+
+	    rle_vector.push_back(prev_val);
+	    rle_vector.push_back(curr_rle);
+
+	    idx_t *rle = new idx_t[rle_vector.size()];
+	    std::copy(rle_vector.begin(), rle_vector.end(), rle);
+
+	    return rle;
+    }
+
+    sel_t* ChangeRLEToSelData(idx_t* rle, idx_t key_count, idx_t offset) {
+
+	    if (key_count <= 4) {
+		    sel_t* rle_sel = reinterpret_cast<sel_t *>(rle);
+		    for(size_t i = 0; i < key_count; i++){
+			    rle_sel[i] += offset;
+		    }
+		    return rle_sel;
+	    }
+
+	    sel_t *sel_data = new sel_t[key_count];
+
+	    idx_t index = 0;
+	    idx_t rle_index = 0;
+
+	    while (index < key_count) {
+		    idx_t rle_num = rle[rle_index + 1];
+
+		    for (size_t i = 0; i < rle_num; i++) {
+			    sel_data[index] = rle[rle_index] + offset;
+			    index++;
+		    }
+
+		    rle_index += 2;
+	    }
+
+	    return sel_data;
+    }
+
+    size_t GetRLESize(idx_t* rle, idx_t key_count) {
+
+	    if (key_count <= 4) {
+		    return sizeof(sel_t) * key_count;
+	    }
+
+	    idx_t index = 0;
+	    idx_t rle_index = 0;
+
+	    while (index < key_count) {
+		    idx_t rle_num = rle[rle_index + 1];
+		    index += rle_num;
+		    rle_index += 2;
+	    }
+
+	    return sizeof(idx_t) * rle_index;
+	}
+
 }
 
 #endif
