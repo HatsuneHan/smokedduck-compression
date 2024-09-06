@@ -32,6 +32,7 @@ class CompressedLimitArtifactList;
 class CompressedReorderLogArtifactList;
 class CompressedCrossArtifactList;
 class CompressedNLJArtifactList;
+class CompressedFinalizeAddressArtifactList;
 
 enum class CompressionMethod {
 	LZ4,
@@ -430,6 +431,7 @@ public:
 
 	// Destructor
 	~CompressedAddressArtifactList() {
+
 		for (size_t i = 0; i < size; i++) {
 			if(artifacts->count[i] < 4){
 				data_ptr_t* addresses_addr = reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
@@ -443,6 +445,7 @@ public:
 			}
 		}
 		delete artifacts;
+
 	}
 
 	void Clear(){
@@ -494,9 +497,86 @@ public:
 
 };
 
+struct CompressedFinalizeAddressArtifacts{
+	Compressed64List addresses;
+	Compressed64List count;
+
+};
+
+class CompressedFinalizeAddressArtifactList{
+public:
+	// Constructor
+	explicit CompressedFinalizeAddressArtifactList()
+	    : artifacts(nullptr), size(0) {};
+
+	// Destructor
+	~CompressedFinalizeAddressArtifactList() {
+
+		if(artifacts != nullptr) {
+			for (size_t i = 0; i < size; i++) {
+				idx_t res_count = artifacts->count[i];
+				if (res_count <= 8) {
+					delete[] reinterpret_cast<data_ptr_t *>(artifacts->addresses[i]);
+				} else {
+					delete[] reinterpret_cast<Compressed64ListDelta**>(artifacts->addresses[i]);
+				}
+			}
+		}
+		delete artifacts;
+
+	}
+
+	void Clear(){
+		if(artifacts != nullptr) {
+			for (size_t i = 0; i < size; i++) {
+				idx_t res_count = artifacts->count[i];
+				if (res_count <= 8) {
+					delete[] reinterpret_cast<data_ptr_t *>(artifacts->addresses[i]);
+				} else {
+					delete[] reinterpret_cast<Compressed64ListDelta**>(artifacts->addresses[i]);
+				}
+			}
+		}
+		delete artifacts;
+
+		artifacts = nullptr;
+		size = 0;
+	}
+
+	void PushBack(idx_t addresses_p, idx_t count_p){
+		if (size == 0) {
+			artifacts = new CompressedFinalizeAddressArtifacts();
+		}
+
+		this->artifacts->addresses.PushBack(addresses_p, size);
+		this->artifacts->count.PushBack(count_p, size);
+
+		size++;
+	}
+
+	idx_t GetBytesSize() {
+		if(size == 0){
+			return sizeof(CompressedFinalizeAddressArtifactList);
+		} else {
+			return this->artifacts->addresses.GetBytesSize()
+			       + this->artifacts->count.GetBytesSize()
+			       + sizeof(CompressedFinalizeAddressArtifactList);
+		}
+	}
+
+public:
+	// Member variables
+	CompressedFinalizeAddressArtifacts* artifacts;
+
+	size_t size;
+
+};
+
+
 struct CompressedCombineArtifacts{
 	Compressed64List src;
 	Compressed64List target;
+
 	Compressed64List count;
 };
 
@@ -508,17 +588,28 @@ public:
 
 	// Destructor
 	~CompressedCombineArtifactList() {
+
 		if(artifacts != nullptr){
 			for (size_t i = 0; i < size; i++) {
 				idx_t res_count = artifacts->count[i];
 				if(res_count <= 8){
 					delete[] reinterpret_cast<data_ptr_t*>(artifacts->src[i]);
 				} else {
-					delete[] reinterpret_cast<Compressed64ListWithSize**>(artifacts->src[i]);
+					delete[] reinterpret_cast<Compressed64ListDelta**>(artifacts->src[i]);
+				}
+			}
+
+			for (size_t i = 0; i < size; i++) {
+				idx_t res_count = artifacts->count[i];
+				if(res_count <= 8){
+					delete[] reinterpret_cast<data_ptr_t*>(artifacts->target[i]);
+				} else {
+					delete[] reinterpret_cast<Compressed64ListDelta**>(artifacts->target[i]);
 				}
 			}
 		}
 		delete artifacts;
+
 	}
 
 	void Clear(){
@@ -528,7 +619,16 @@ public:
 				if(res_count <= 8){
 					delete[] reinterpret_cast<data_ptr_t*>(artifacts->src[i]);
 				} else {
-					delete[] reinterpret_cast<Compressed64ListWithSize**>(artifacts->src[i]);
+					delete[] reinterpret_cast<Compressed64ListDelta**>(artifacts->src[i]);
+				}
+			}
+
+			for (size_t i = 0; i < size; i++) {
+				idx_t res_count = artifacts->count[i];
+				if(res_count <= 8){
+					delete[] reinterpret_cast<data_ptr_t*>(artifacts->target[i]);
+				} else {
+					delete[] reinterpret_cast<Compressed64ListDelta**>(artifacts->target[i]);
 				}
 			}
 		}
@@ -585,6 +685,7 @@ public:
 
 	// Destructor
 	~CompressedAddressSelArtifactList() {
+
 		for (size_t i = 0; i < size; i++) {
 			if(artifacts->count[i] < 4){
 				data_ptr_t* addresses_addr = reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
@@ -604,6 +705,7 @@ public:
 		}
 
 		delete artifacts;
+
 	}
 
 	void Clear(){
@@ -688,7 +790,6 @@ public:
 
 	// Destructor
 	~CompressedJoinGatherArtifactList() {
-
 		if(artifacts != nullptr){
 			for (size_t i = 0; i < size; i++) {
 				data_ptr_t* compressed_rhs_addr = reinterpret_cast<data_ptr_t*>(artifacts->rhs[i]);
@@ -732,6 +833,7 @@ public:
 		}
 
 		delete artifacts;
+
 	}
 
 	void Clear(){
@@ -859,6 +961,7 @@ public:
 
 	// Destructor
 	~CompressedPerfectJoinArtifactList() {
+
 		if(artifacts != nullptr){
 			for(size_t i = 0; i < size; i++){
 				idx_t start_bitmap_idx = artifacts->start_bitmap_idx[i];
@@ -887,6 +990,7 @@ public:
 		}
 
 		delete artifacts;
+
 	}
 
 	void Clear(){
@@ -995,6 +1099,7 @@ public:
 
 	// Destructor
 	~CompressedPerfectFullScanHTArtifactList() {
+
 		if(artifacts != nullptr){
 			for (size_t i = 0; i < size; i++) {
 				if(artifacts->key_count[i] <= 8){
@@ -1020,6 +1125,7 @@ public:
 		}
 
 		delete artifacts;
+
 	}
 
 	void Clear(){
@@ -1295,6 +1401,7 @@ public:
 
 	// Destructor
 	~CompressedNLJArtifactList() {
+
 		if(artifacts != nullptr){
 			for(size_t i = 0; i < size; i++){
 				idx_t start_bitmap_idx = artifacts->start_bitmap_idx[i];

@@ -265,6 +265,7 @@ idx_t GroupedAggregateHashTable::AddChunk(DataChunk &groups, Vector &group_hashe
 			}
 
 			data_ptr_t* addresses_compressed = ChangeAddressToBitpack(ptrs, groups.size(), is_ascend_count);
+
 			active_log->compressed_scatter_log.PushBack(reinterpret_cast<idx_t>(addresses_compressed), static_cast<idx_t>(is_ascend_count), groups.size());
 
 		} else {

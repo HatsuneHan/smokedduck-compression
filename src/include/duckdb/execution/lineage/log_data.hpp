@@ -158,7 +158,7 @@ public:
 	CompressedCombineArtifactList compressed_combine_log;
 
 	vector<address_artifact> finalize_states_log;
-	CompressedAddressArtifactList compressed_finalize_states_log;
+	CompressedFinalizeAddressArtifactList compressed_finalize_states_log;
 
 	vector<join_gather_artifact> join_gather_log;
 	CompressedJoinGatherArtifactList compressed_join_gather_log;

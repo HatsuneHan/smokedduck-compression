@@ -922,10 +922,9 @@ size_t LineageManager::GetCompressedArtifactSize() {
 
 				for(size_t i = 0; i < curr_log->compressed_finalize_states_log.size; i++){
 					if(curr_log->compressed_finalize_states_log.artifacts->addresses[i] != 0){
-						tmp_finalize_states_log_buffer_size += GetAddressBitpackSize(
+						tmp_finalize_states_log_buffer_size += GetAddressDeltaRLESize(
 						    reinterpret_cast<data_ptr_t*>(curr_log->compressed_finalize_states_log.artifacts->addresses[i]),
-						    curr_log->compressed_finalize_states_log.artifacts->count[i],
-						    curr_log->compressed_finalize_states_log.artifacts->is_ascend[i]);
+						    curr_log->compressed_finalize_states_log.artifacts->count[i]);
 					}
 				}
 

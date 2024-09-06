@@ -85,8 +85,8 @@ void OperatorLineage::PostProcess() {
 			  // std::cout << count_so_far+res_count << " finalize states: " << tkey << " " << log[tkey]->finalize_states_log.size() << std::endl;
 
 			  data_ptr_t* compressed_payload = reinterpret_cast<data_ptr_t*>(log[tkey]->compressed_finalize_states_log.artifacts->addresses[k]);
-			  idx_t is_ascend_count = log[tkey]->compressed_finalize_states_log.artifacts->is_ascend[k];
-			  data_ptr_t* payload = ChangeBitpackToAddress(compressed_payload, res_count, is_ascend_count);
+//			  idx_t is_ascend_count = log[tkey]->compressed_finalize_states_log.artifacts->is_ascend[k];
+			  data_ptr_t* payload = ChangeDeltaRLEToAddress(compressed_payload, res_count);
 
 			  for (idx_t j=0; j < res_count; ++j) {
 				  if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
@@ -97,7 +97,7 @@ void OperatorLineage::PostProcess() {
 			  }
 			  count_so_far += res_count;
 
-			  if(res_count >= 4){
+			  if(res_count > 8){
 				  delete[] payload;
 			  }
 
