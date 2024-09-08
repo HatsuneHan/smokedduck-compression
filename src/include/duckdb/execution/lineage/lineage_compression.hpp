@@ -88,7 +88,9 @@ public:
 	    : delta_buffer(nullptr), base(0), delta_bit_size(0), delta_buffer_size(0) {};
 
 	virtual ~Compressed64List() {
-		delete[] delta_buffer; // Ensure to free the allocated memory if any
+		if (delta_buffer != nullptr) {
+			delete[] delta_buffer; // Ensure to free the allocated memory if any
+		}
 	};
 
 	void WriteBitsToBuffer(idx_t curr_buffer_bit_size, idx_t value);
@@ -687,21 +689,36 @@ public:
 	~CompressedAddressSelArtifactList() {
 
 		for (size_t i = 0; i < size; i++) {
-			if(artifacts->count[i] < 4){
-				data_ptr_t* addresses_addr = reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
-				delete[] addresses_addr;
-			} else if(artifacts->is_ascend[i] <= 2){
-				Compressed64ListDelta** compressed_delta_list = reinterpret_cast<Compressed64ListDelta**>(artifacts->addresses[i]);
-				delete[] compressed_delta_list;
+			idx_t res_count = artifacts->count[i];
+			idx_t is_ascend = artifacts->is_ascend[i];
+
+			if(is_ascend <= 2){
+				if(res_count <= 8){
+					delete[] reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
+				} else {
+					delete[] reinterpret_cast<Compressed64ListDelta**>(artifacts->addresses[i]);
+				}
 			} else {
-				Compressed64ListWithSize* compressed_list = reinterpret_cast<Compressed64ListWithSize*>(artifacts->addresses[i]);
-				delete compressed_list;
+				if(res_count < 4){
+					delete[] reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
+				} else {
+					Compressed64ListWithSize* compressed_list = reinterpret_cast<Compressed64ListWithSize*>(artifacts->addresses[i]);
+					delete compressed_list;
+				}
 			}
 		}
 
 		for (size_t i = 0; i < size; i++) {
-			sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->sel[i]);
-			delete[] sel_addr;
+			idx_t count = artifacts->count[i];
+			if(artifacts->sel[i] != 0){
+				if(count <= 16){
+					sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->sel[i]);
+					delete[] sel_addr;
+				} else {
+					Compressed64ListWithSize* compressed_list = reinterpret_cast<Compressed64ListWithSize*>(artifacts->sel[i]);
+					delete compressed_list;
+				}
+			}
 		}
 
 		delete artifacts;
@@ -709,22 +726,39 @@ public:
 	}
 
 	void Clear(){
+
 		for (size_t i = 0; i < size; i++) {
-			if(artifacts->count[i] < 4){
-				data_ptr_t* addresses_addr = reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
-				delete[] addresses_addr;
-			} else if(artifacts->is_ascend[i] <= 2){
-				Compressed64ListDelta** compressed_delta_list = reinterpret_cast<Compressed64ListDelta**>(artifacts->addresses[i]);
-				delete[] compressed_delta_list;
+			idx_t res_count = artifacts->count[i];
+			idx_t is_ascend = artifacts->is_ascend[i];
+
+			if(is_ascend <= 2){
+				if(res_count <= 8){
+					delete[] reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
+				} else {
+					delete[] reinterpret_cast<Compressed64ListDelta**>(artifacts->addresses[i]);
+				}
 			} else {
-				Compressed64ListWithSize* compressed_list = reinterpret_cast<Compressed64ListWithSize*>(artifacts->addresses[i]);
-				delete compressed_list;
+				if(res_count < 4){
+					delete[] reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
+				} else {
+					Compressed64ListWithSize* compressed_list = reinterpret_cast<Compressed64ListWithSize*>(artifacts->addresses[i]);
+					delete compressed_list;
+				}
 			}
 		}
 
 		for (size_t i = 0; i < size; i++) {
-			sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->sel[i]);
-			delete[] sel_addr;
+			idx_t count = artifacts->count[i];
+			if(artifacts->sel[i] != 0){
+				if(count <= 16){
+					sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->sel[i]);
+					delete[] sel_addr;
+				} else {
+					Compressed64ListWithSize* compressed_list = reinterpret_cast<Compressed64ListWithSize*>(artifacts->sel[i]);
+					delete compressed_list;
+				}
+			}
+
 		}
 
 		delete artifacts;

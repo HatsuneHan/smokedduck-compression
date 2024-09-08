@@ -1019,7 +1019,6 @@ namespace duckdb {
     }
 
     data_ptr_t* ChangeAddressToDeltaRLE(data_ptr_t* address_data, idx_t count){
-
 	    if(count <= 8){
 		    data_ptr_t* address_data_copy = new data_ptr_t[count];
 		    std::copy(address_data, address_data + count, address_data_copy);
@@ -1075,6 +1074,14 @@ namespace duckdb {
 			    }
 
 			    i++;
+
+			    if(i >= count){
+				    break;
+			    }
+		    }
+
+		    if(i >= count){
+			    break;
 		    }
 
 		    if(change_order){
@@ -1108,13 +1115,12 @@ namespace duckdb {
 		    delete[] delta_rle;
 
 	    } else {
-		    Compressed64ListDelta* compressed_delta = new Compressed64ListDelta(reinterpret_cast<idx_t*>(address_data), 0, curr_base);
+		    Compressed64ListDelta* compressed_delta = new Compressed64ListDelta(reinterpret_cast<idx_t*>(0), 0, curr_base);
 		    compressed_delta_list.push_back(compressed_delta);
 	    }
 
 	    Compressed64ListDelta** compressed_delta_list_array = new Compressed64ListDelta*[compressed_delta_list.size()];
 	    std::copy(compressed_delta_list.begin(), compressed_delta_list.end(), compressed_delta_list_array);
-
 		return reinterpret_cast<data_ptr_t*>(compressed_delta_list_array);
 	}
 
@@ -1131,13 +1137,12 @@ namespace duckdb {
 	    idx_t ptr_index = 0;
 
 	    while(index < count){
-		    Compressed64ListDelta* compressed_delta = compressed_delta_list[ptr_index];
-		    address_data[index] = reinterpret_cast<data_ptr_t>(compressed_delta->delta_base);
+		    address_data[index] = reinterpret_cast<data_ptr_t>(compressed_delta_list[ptr_index]->delta_base);
 		    index++;
 
-		    for(size_t i = 0; i < compressed_delta->size; i += 2){
-			    idx_t delta = compressed_delta->Get(i);
-			    idx_t rle = compressed_delta->Get(i+1);
+		    for(size_t i = 0; i < compressed_delta_list[ptr_index]->size; i += 2){
+			    idx_t delta = compressed_delta_list[ptr_index]->Get(i);
+			    idx_t rle = compressed_delta_list[ptr_index]->Get(i+1);
 
 			    for(size_t j = 0; j < rle; j++){
 				    address_data[index] = reinterpret_cast<data_ptr_t>(reinterpret_cast<idx_t>(address_data[index-1]) + delta);
@@ -1147,7 +1152,6 @@ namespace duckdb {
 
 		    ptr_index++;
 	    }
-
 	    return address_data;
 	}
 

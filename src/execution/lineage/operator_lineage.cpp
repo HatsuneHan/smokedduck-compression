@@ -223,7 +223,13 @@ void OperatorLineage::PostProcess() {
 
 			  data_ptr_t* compressed_payload = reinterpret_cast<data_ptr_t*>(log[tkey]->compressed_scatter_sel_log.artifacts->addresses[k]);
 			  idx_t is_ascend_count = log[tkey]->compressed_scatter_sel_log.artifacts->is_ascend[k];
-			  data_ptr_t* payload = ChangeBitpackToAddress(compressed_payload, res_count, is_ascend_count);
+
+			  data_ptr_t* payload;
+			  if(is_ascend_count <= 2){
+				  payload = ChangeDeltaRLEToAddress(compressed_payload, res_count);
+			  } else {
+				  payload = ChangeBitpackToAddress(compressed_payload, res_count, is_ascend_count);
+			  }
 
 			  idx_t compressed_sel_num = log[tkey]->compressed_scatter_sel_log.artifacts->sel[k];
 
@@ -237,6 +243,11 @@ void OperatorLineage::PostProcess() {
 						  //std::cout << "gather: " << k << " " << log_index->codes[payload[j]] << " " << j << " " << (void*)payload[j] << std::endl;
 					  }
 				  }
+
+				  if(res_count > 16){
+					  delete[] sel;
+				  }
+
 			  } else {
 				  for (idx_t j=0; j < res_count; ++j) {
 					  if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
@@ -246,9 +257,10 @@ void OperatorLineage::PostProcess() {
 				  }
 			  }
 
-			  if(res_count >= 4){
+			  if((is_ascend_count <= 2 && res_count > 8) || (is_ascend_count > 2 && res_count >= 4)){
 				  delete[] payload;
 			  }
+
 		  }
 
 //		  log[tkey]->compressed_scatter_sel_log.Clear();
