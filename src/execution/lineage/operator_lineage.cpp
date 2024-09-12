@@ -454,11 +454,13 @@ void OperatorLineage::PostProcess() {
 			  }
 			  count_so_far += res_count;
 
-			  if(use_rle == 1 || (use_rle == 0 && res_count > 8)){
+			  if(compressed_payload != nullptr && (use_rle || (use_rle == 0 && res_count > 8))){
 				  delete[] payload;
 			  }
 		  }
-//		  log[tkey]->compressed_join_gather_log.Clear();
+		  std::cout << "start Clear\n";
+		  log[tkey]->compressed_join_gather_log.Clear();
+		  std::cout << "end Clear\n";
 
 	  } else {
 		  if (log.count(tkey) == 0 || log[tkey]->join_gather_log.empty()){

@@ -576,6 +576,7 @@ void TupleDataCollection::Scatter(TupleDataChunkState &chunk_state, const DataCh
 
 			if (append_sel.data()) {
 				sel_t* append_sel_deltabitpack = ChangeSelDataToDeltaBitpack(append_sel.data(), append_count);
+
 				active_log->compressed_scatter_sel_log.PushBack(reinterpret_cast<idx_t>(addresses_compressed),
 				                                                static_cast<idx_t>(is_ascend_count),
 				                                                reinterpret_cast<idx_t>(append_sel_deltabitpack), append_count,

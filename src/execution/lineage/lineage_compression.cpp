@@ -861,34 +861,51 @@ namespace duckdb {
 
 	}
 
-
     data_ptr_t* ChangeAddressToRLEBitpack(data_ptr_t* address_data, idx_t count, idx_t use_rle){
+	    if(count == 0){
+		    return nullptr;
+	    }
 	    // case 1 use rle (+ bitpack)
 	    if(use_rle){
 		    vector<idx_t> rle_bitpack;
-		    rle_bitpack.push_back(reinterpret_cast<idx_t>(address_data[0]));
-		    idx_t curr_rle = 1;
+		    vector<uint16_t> rle_bitpack_count;
 
-			for(size_t i = 1; i < count; i++){
+		    rle_bitpack.push_back(reinterpret_cast<idx_t>(address_data[0]));
+		    uint16_t curr_rle = 1;
+
+		    for(size_t i = 1; i < count; i++){
 			    if(address_data[i] == address_data[i-1]){
 				    curr_rle++;
 			    } else {
-				    rle_bitpack.push_back(curr_rle);
+				    rle_bitpack_count.push_back(curr_rle);
 				    rle_bitpack.push_back(reinterpret_cast<idx_t>(address_data[i]));
 				    curr_rle = 1;
 			    }
 		    }
-		    rle_bitpack.push_back(curr_rle);
+		    rle_bitpack_count.push_back(curr_rle);
 
 		    idx_t* rle_bitpack_array = new idx_t[rle_bitpack.size()];
 		    std::copy(rle_bitpack.begin(), rle_bitpack.end(), rle_bitpack_array);
 
+		    uint16_t* rle_bitpack_count_array = new uint16_t[rle_bitpack_count.size()];
+		    std::copy(rle_bitpack_count.begin(), rle_bitpack_count.end(), rle_bitpack_count_array);
+
 		    if(use_rle == 1){
-			    Compressed64ListWithSize* compressed_list_with_size = new Compressed64ListWithSize(rle_bitpack_array, rle_bitpack.size());
+			    Compressed64ListWithSize** compressed_list_with_size = new Compressed64ListWithSize*[2];
+			    compressed_list_with_size[0] = new Compressed64ListWithSize(rle_bitpack_array, rle_bitpack.size());
+			    compressed_list_with_size[1] = new Compressed64ListWithSize(rle_bitpack_count_array, rle_bitpack_count.size());
+
 			    delete[] rle_bitpack_array;
+			    delete[] rle_bitpack_count_array;
+
 			    return reinterpret_cast<data_ptr_t*>(compressed_list_with_size);
+
 		    } else if (use_rle == 2){
-			    return reinterpret_cast<data_ptr_t*>(rle_bitpack_array);
+			    idx_t** rle_array = new idx_t*[2];
+			    rle_array[0] = rle_bitpack_array;
+			    rle_array[1] = reinterpret_cast<idx_t*>(rle_bitpack_count_array);
+
+			    return reinterpret_cast<data_ptr_t*>(rle_array);
 		    }
 	    }
 
@@ -913,29 +930,34 @@ namespace duckdb {
 		    idx_t curr_idx = 0;
 
 		    if(use_rle == 1){
-			    Compressed64ListWithSize* compressed_list_with_size = reinterpret_cast<Compressed64ListWithSize*>(compressed_list);
-			    for(size_t i = 0; i < compressed_list_with_size->size; i+=2){
-				    rle_bitpack_array[curr_idx] = reinterpret_cast<data_ptr_t>(compressed_list_with_size->Get(i));
+			    Compressed64ListWithSize** compressed_list_with_size = reinterpret_cast<Compressed64ListWithSize**>(compressed_list);
+			    for(size_t i = 0; i < compressed_list_with_size[0]->size; i++){
+				    data_ptr_t curr_val = reinterpret_cast<data_ptr_t>(compressed_list_with_size[0]->Get(i));
+				    rle_bitpack_array[curr_idx] = curr_val;
 				    curr_idx++;
 
-				    idx_t rle = compressed_list_with_size->Get(i+1);
+				    idx_t rle = compressed_list_with_size[1]->Get(i);
 				    for(size_t j = 0; j < rle - 1; j++){
-					    rle_bitpack_array[curr_idx] = reinterpret_cast<data_ptr_t>(compressed_list_with_size->Get(i));
+					    rle_bitpack_array[curr_idx] = curr_val;
 					    curr_idx++;
 				    }
 			    }
+
 		    } else if(use_rle == 2){
 			    idx_t rle_idx = 0;
+			    idx_t** rle_array = reinterpret_cast<idx_t**>(compressed_list);
+
 			    while(curr_idx < count){
-				    rle_bitpack_array[curr_idx] = compressed_list[rle_idx];
+				    data_ptr_t curr_val = reinterpret_cast<data_ptr_t>(rle_array[0][rle_idx]);
+				    rle_bitpack_array[curr_idx] = curr_val;
 				    curr_idx++;
 
-				    idx_t rle = reinterpret_cast<idx_t>(compressed_list[rle_idx+1]);
+				    uint16_t rle = reinterpret_cast<uint16_t *>(rle_array[1])[rle_idx];
 				    for(size_t j = 0; j < rle - 1; j++){
-					    rle_bitpack_array[curr_idx] = compressed_list[rle_idx];
+					    rle_bitpack_array[curr_idx] = curr_val;
 					    curr_idx++;
 				    }
-				    rle_idx += 2;
+				    rle_idx++;
 			    }
 		    }
 
@@ -962,29 +984,24 @@ namespace duckdb {
     size_t GetAddressRLEBitpackSize(data_ptr_t* compressed_list, idx_t count, idx_t use_rle){
 
 	    if(use_rle == 2) {
-		    data_ptr_t *rle_bitpack_array = new data_ptr_t[count];
-
 		    idx_t curr_idx = 0;
 		    idx_t rle_idx = 0;
+		    idx_t** rle_array = reinterpret_cast<idx_t**>(compressed_list);
 
-		    while (curr_idx < count) {
-			    rle_bitpack_array[curr_idx] = compressed_list[rle_idx];
+		    while(curr_idx < count){
 			    curr_idx++;
 
-			    idx_t rle = reinterpret_cast<idx_t>(compressed_list[rle_idx + 1]);
-			    for (size_t j = 0; j < rle - 1; j++) {
-				    rle_bitpack_array[curr_idx] = compressed_list[rle_idx];
+			    uint16_t rle = reinterpret_cast<uint16_t *>(rle_array[1])[rle_idx];
+			    for(size_t j = 0; j < rle - 1; j++){
 				    curr_idx++;
 			    }
-			    rle_idx += 2;
+			    rle_idx++;
 		    }
-		    delete[] rle_bitpack_array;
-
-		    return sizeof(data_ptr_t) * rle_idx;
+		    return sizeof(data_ptr_t) * rle_idx + sizeof(uint16_t) * rle_idx + 2 * sizeof(idx_t*);
 
 	    } else if (use_rle == 1){
-		    Compressed64ListWithSize* compressed_list_with_size = reinterpret_cast<Compressed64ListWithSize*>(compressed_list);
-		    return compressed_list_with_size->GetBytesSize();
+		    Compressed64ListWithSize** compressed_list_with_size = reinterpret_cast<Compressed64ListWithSize**>(compressed_list);
+		    return compressed_list_with_size[0]->GetBytesSize() + compressed_list_with_size[1]->GetBytesSize() + 2 * sizeof(Compressed64ListWithSize*);
 	    }
 
 	    if(count <= 8){
@@ -993,7 +1010,7 @@ namespace duckdb {
 
 	    Compressed64ListWithSize* compressed_list_with_size = reinterpret_cast<Compressed64ListWithSize*>(compressed_list);
 	    return compressed_list_with_size->GetBytesSize();
-	}
+    }
 
     idx_t GetUseRle(data_ptr_t* rhs_ptrs, idx_t result_count){
 	    size_t rle_number = 1;
@@ -1007,8 +1024,8 @@ namespace duckdb {
 		    }
 	    }
 
-	    if( 2 * rle_number < result_count){
-		    if (rle_number >= 12){ // use bitpack
+	    if(2 * rle_number < result_count){
+		    if (rle_number >= 6){ // use bitpack
 			    use_rle = 1;
 		    } else { // directly rle
 			    use_rle = 2;

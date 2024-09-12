@@ -832,12 +832,18 @@ public:
 
 				if(use_rle){
 					if(use_rle == 1){
-						Compressed64ListWithSize* compressed_list = reinterpret_cast<Compressed64ListWithSize*>(compressed_rhs_addr);
-						delete compressed_list;
+						Compressed64ListWithSize** compressed_list = reinterpret_cast<Compressed64ListWithSize**>(compressed_rhs_addr);
+						delete compressed_list[0];
+						delete compressed_list[1];
+						delete[] compressed_list;
+
 					} else if (use_rle == 2){
-						idx_t* rhs_addr = reinterpret_cast<idx_t*>(compressed_rhs_addr);
+						idx_t** rhs_addr = reinterpret_cast<idx_t**>(compressed_rhs_addr);
+						delete[] rhs_addr[0];
+						delete[] reinterpret_cast<uint16_t*>(rhs_addr[1]);
 						delete[] rhs_addr;
 					}
+
 					continue;
 				}
 
@@ -879,12 +885,18 @@ public:
 
 				if(use_rle){
 					if(use_rle == 1){
-						Compressed64ListWithSize* compressed_list = reinterpret_cast<Compressed64ListWithSize*>(compressed_rhs_addr);
-						delete compressed_list;
+						Compressed64ListWithSize** compressed_list = reinterpret_cast<Compressed64ListWithSize**>(compressed_rhs_addr);
+						delete compressed_list[0];
+						delete compressed_list[1];
+						delete[] compressed_list;
+
 					} else if (use_rle == 2){
-						idx_t* rhs_addr = reinterpret_cast<idx_t*>(compressed_rhs_addr);
+						idx_t** rhs_addr = reinterpret_cast<idx_t**>(compressed_rhs_addr);
+						delete[] rhs_addr[0];
+						delete[] reinterpret_cast<uint16_t*>(rhs_addr[1]);
 						delete[] rhs_addr;
 					}
+
 					continue;
 				}
 
