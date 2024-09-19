@@ -114,7 +114,7 @@ void DuckDBQueriesListFunction(ClientContext &context, TableFunctionInput &data_
 	idx_t count = 0;
 	idx_t total_bytes = 0;
 
-	std::vector<idx_t> stats(3, 0);
+	std::vector<int64_t> stats(3, 0);
 
 	if(lineage_manager->compress) {
 		idx_t compressed_total_size = lineage_manager->GetCompressedArtifactSize();
@@ -134,7 +134,7 @@ void DuckDBQueriesListFunction(ClientContext &context, TableFunctionInput &data_
 		output.SetValue(col++, count, query);
 
     // size_bytes_max
-		output.SetValue(col++, count,Value::INTEGER(stats[0]));
+		output.SetValue(col++, count,Value::BIGINT(stats[0]));
 
     // size_bytes_min
 		output.SetValue(col++, count,Value::INTEGER(stats[2]));
