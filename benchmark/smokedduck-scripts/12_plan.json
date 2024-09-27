@@ -1,0 +1,109 @@
+{
+   "name":  "Query", 
+   "result": 0.316624,
+   "timing": 0.316624,
+   "cardinality": 0,
+   "extra-info": "SELECT l_shipmode, sum( CASE WHEN o_orderpriority = '1-URGENT' OR o_orderpriority = '2-HIGH' THEN 1 ELSE 0 END) AS high_line_count, sum( CASE WHEN o_orderpriority <> '1-URGENT' AND o_orderpriority <> '2-HIGH' THEN 1 ELSE 0 END) AS low_line_count FROM orders, lineitem WHERE o_orderkey = l_orderkey AND l_shipmode IN ('MAIL', 'SHIP') AND l_commitdate < l_receiptdate AND l_shipdate < l_commitdate AND l_receiptdate >= CAST('1994-01-01' AS date) AND l_receiptdate < CAST('1995-01-01' AS date) GROUP BY l_shipmode ORDER BY l_shipmode;", 
+   "timings": [
+
+   ],
+   "children": [
+    {
+      "name": "RESULT_COLLECTOR",
+      "timing":0.000006,
+      "cardinality":0,
+      "extra_info": "",
+      "children": [
+       {
+         "name": "PROJECTION",
+         "timing":0.000001,
+         "cardinality":2,
+         "extra_info": "__internal_decompress_string(#0)\n#1\n#2\n",
+         "children": [
+          {
+            "name": "ORDER_BY",
+            "timing":0.000035,
+            "cardinality":2,
+            "extra_info": "ORDERS:\nlineitem.l_shipmode ASC",
+            "children": [
+             {
+               "name": "PROJECTION",
+               "timing":0.000001,
+               "cardinality":2,
+               "extra_info": "__internal_compress_string_ubigint(#0)\n#1\n#2\n",
+               "children": [
+                {
+                  "name": "PROJECTION",
+                  "timing":0.000002,
+                  "cardinality":2,
+                  "extra_info": "__internal_decompress_string(#0)\n#1\n#2\n",
+                  "children": [
+                   {
+                     "name": "HASH_GROUP_BY",
+                     "timing":0.001113,
+                     "cardinality":2,
+                     "extra_info": "#0\nsum(#1)\nsum(#2)",
+                     "children": [
+                      {
+                        "name": "PROJECTION",
+                        "timing":0.000871,
+                        "cardinality":30988,
+                        "extra_info": "l_shipmode\nCASE  WHEN (((o_orderpriority = '1-URGENT') OR (o_orderpriority = '2-HIGH'))) THEN (1) ELSE 0 END\nCASE  WHEN (((o_orderpriority != '1-URGENT') AND (o_orderpriority != '2-HIGH'))) THEN (1) ELSE 0 END\n",
+                        "children": [
+                         {
+                           "name": "PROJECTION",
+                           "timing":0.000249,
+                           "cardinality":30988,
+                           "extra_info": "__internal_compress_integral_uinteger(#0, 1)\n#1\n__internal_compress_integral_uinteger(#2, 1)\n__internal_compress_string_ubigint(#3)\n",
+                           "children": [
+                            {
+                              "name": "HASH_JOIN",
+                              "timing":0.041923,
+                              "cardinality":30988,
+                              "extra_info": "INNER\no_orderkey = l_orderkey\n\n[INFOSEPARATOR]\nEC: 240048\n",
+                              "children": [
+                               {
+                                 "name": "SEQ_SCAN ",
+                                 "timing":0.034793,
+                                 "cardinality":1500000,
+                                 "extra_info": "orders\n[INFOSEPARATOR]\no_orderkey\no_orderpriority\n[INFOSEPARATOR]\nEC: 1500000",
+                                 "children": [
+                                 ]
+                               }
+,
+                               {
+                                 "name": "FILTER",
+                                 "timing":0.038464,
+                                 "cardinality":30988,
+                                 "extra_info": "((l_commitdate < l_receiptdate) AND (l_shipdate < l_commitdate) AND ((l_shipmode = 'MAIL') OR (l_shipmode = 'SHIP')))\n[INFOSEPARATOR]\nEC: 240048",
+                                 "children": [
+                                  {
+                                    "name": "SEQ_SCAN ",
+                                    "timing":0.190145,
+                                    "cardinality":885773,
+                                    "extra_info": "lineitem\n[INFOSEPARATOR]\nl_orderkey\nl_shipmode\nl_commitdate\nl_receiptdate\nl_shipdate\n[INFOSEPARATOR]\nFilters: l_receiptdate>='1994-01-01'::DATE AND l_receiptdate<'1995-01-01'::DATE AND l_receiptdate IS NOT NULL\nl_commitdate<'1995-01-01'::DATE AND l_commitdate IS NOT NULL\nl_shipdate<'1995-01-01'::DATE AND l_shipdate IS NOT NULL\n\n[INFOSEPARATOR]\nEC: 240048",
+                                    "children": [
+                                    ]
+                                  }
+                                 ]
+                               }
+                              ]
+                            }
+                           ]
+                         }
+                        ]
+                      }
+                     ]
+                   }
+                  ]
+                }
+               ]
+             }
+            ]
+          }
+         ]
+       }
+      ]
+    }
+   ]
+}

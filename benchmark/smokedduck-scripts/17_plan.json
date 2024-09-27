@@ -1,0 +1,185 @@
+{
+   "name":  "Query", 
+   "result": 0.143319,
+   "timing": 0.143319,
+   "cardinality": 0,
+   "extra-info": "SELECT sum(l_extendedprice) / 7.0 AS avg_yearly FROM lineitem, part WHERE p_partkey = l_partkey AND p_brand = 'Brand#23' AND p_container = 'MED BOX' AND l_quantity < ( SELECT 0.2 * avg(l_quantity) FROM lineitem WHERE l_partkey = p_partkey);", 
+   "timings": [
+
+   ],
+   "children": [
+    {
+      "name": "RESULT_COLLECTOR",
+      "timing":0.000005,
+      "cardinality":0,
+      "extra_info": "",
+      "children": [
+       {
+         "name": "PROJECTION",
+         "timing":0.000004,
+         "cardinality":1,
+         "extra_info": "avg_yearly\n",
+         "children": [
+          {
+            "name": "UNGROUPED_AGGREGATE",
+            "timing":0.000006,
+            "cardinality":1,
+            "extra_info": "sum(#0)",
+            "children": [
+             {
+               "name": "PROJECTION",
+               "timing":0.000000,
+               "cardinality":587,
+               "extra_info": "l_extendedprice\n",
+               "children": [
+                {
+                  "name": "PROJECTION",
+                  "timing":0.000001,
+                  "cardinality":587,
+                  "extra_info": "#0\n#3\n#4\n",
+                  "children": [
+                   {
+                     "name": "FILTER",
+                     "timing":0.000318,
+                     "cardinality":587,
+                     "extra_info": "(CAST(l_quantity AS DOUBLE) < SUBQUERY)\n[INFOSEPARATOR]\nEC: 3000607",
+                     "children": [
+                      {
+                        "name": "RIGHT_DELIM_JOIN",
+                        "timing":0.001402,
+                        "cardinality":0,
+                        "extra_info": "RIGHT\np_partkey IS NOT DISTINCT FROM p_partkey\n\n[INFOSEPARATOR]\nEC: 3000607\n",
+                        "children": [
+                         {
+                           "name": "HASH_JOIN",
+                           "timing":0.032590,
+                           "cardinality":6088,
+                           "extra_info": "INNER\nl_partkey = p_partkey\n\n[INFOSEPARATOR]\nBuild Min: 1\nBuild Max: 200000\n\n[INFOSEPARATOR]\nEC: 80175\n",
+                           "children": [
+                            {
+                              "name": "SEQ_SCAN ",
+                              "timing":0.013592,
+                              "cardinality":6001215,
+                              "extra_info": "lineitem\n[INFOSEPARATOR]\nl_partkey\nl_quantity\nl_extendedprice\n[INFOSEPARATOR]\nEC: 6001215",
+                              "children": [
+                              ]
+                            }
+,
+                            {
+                              "name": "SEQ_SCAN ",
+                              "timing":0.008314,
+                              "cardinality":204,
+                              "extra_info": "part\n[INFOSEPARATOR]\np_partkey\n[INFOSEPARATOR]\nFilters: p_brand='Brand#23' AND p_brand IS NOT NULL\np_container='MED BOX' AND p_container IS NOT NULL\n\n[INFOSEPARATOR]\nEC: 5000",
+                              "children": [
+                              ]
+                            }
+                           ]
+                         }
+,
+                         {
+                           "name": "HASH_JOIN",
+                           "timing":0.000476,
+                           "cardinality":6088,
+                           "extra_info": "RIGHT\np_partkey IS NOT DISTINCT FROM p_partkey\n\n[INFOSEPARATOR]\nEC: 3000607\n",
+                           "children": [
+                            {
+                              "name": "PROJECTION",
+                              "timing":0.000003,
+                              "cardinality":204,
+                              "extra_info": "(0.2 * avg(l_quantity))\np_partkey\n",
+                              "children": [
+                               {
+                                 "name": "PROJECTION",
+                                 "timing":0.000003,
+                                 "cardinality":204,
+                                 "extra_info": "__internal_decompress_integral_bigint(#0, 1)\n#1\n",
+                                 "children": [
+                                  {
+                                    "name": "HASH_GROUP_BY",
+                                    "timing":0.000814,
+                                    "cardinality":204,
+                                    "extra_info": "#0\navg(#1)",
+                                    "children": [
+                                     {
+                                       "name": "PROJECTION",
+                                       "timing":0.000002,
+                                       "cardinality":6088,
+                                       "extra_info": "p_partkey\nl_quantity\n",
+                                       "children": [
+                                        {
+                                          "name": "PROJECTION",
+                                          "timing":0.000024,
+                                          "cardinality":6088,
+                                          "extra_info": "__internal_compress_integral_uinteger(#0, 1)\n#1\n#2\n",
+                                          "children": [
+                                           {
+                                             "name": "HASH_JOIN",
+                                             "timing":0.065730,
+                                             "cardinality":6088,
+                                             "extra_info": "INNER\nl_partkey = p_partkey\n\n[INFOSEPARATOR]\nEC: 6001215\n",
+                                             "children": [
+                                              {
+                                                "name": "SEQ_SCAN ",
+                                                "timing":0.009328,
+                                                "cardinality":6001215,
+                                                "extra_info": "lineitem\n[INFOSEPARATOR]\nl_partkey\nl_quantity\n[INFOSEPARATOR]\nEC: 6001215",
+                                                "children": [
+                                                ]
+                                              }
+,
+                                              {
+                                                "name": "DELIM_SCAN",
+                                                "timing":0.000000,
+                                                "cardinality":0,
+                                                "extra_info": "",
+                                                "children": [
+                                                ]
+                                              }
+                                             ]
+                                           }
+                                          ]
+                                        }
+                                       ]
+                                     }
+                                    ]
+                                  }
+                                 ]
+                               }
+                              ]
+                            }
+,
+                            {
+                              "name": "DUMMY_SCAN",
+                              "timing":0.000000,
+                              "cardinality":0,
+                              "extra_info": "",
+                              "children": [
+                              ]
+                            }
+                           ]
+                         }
+,
+                         {
+                           "name": "HASH_GROUP_BY",
+                           "timing":0.000018,
+                           "cardinality":204,
+                           "extra_info": "#0",
+                           "children": [
+                           ]
+                         }
+                        ]
+                      }
+                     ]
+                   }
+                  ]
+                }
+               ]
+             }
+            ]
+          }
+         ]
+       }
+      ]
+    }
+   ]
+}

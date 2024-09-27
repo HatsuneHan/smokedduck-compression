@@ -1,0 +1,44 @@
+# name: test/sql/lineage/l_limit/test_limit.test
+# description: Test Filter Lineage
+# group: [l_limit]
+
+statement ok
+PRAGMA explain_output = PHYSICAL_ONLY;
+
+statement ok
+CREATE TABLE t1(i INTEGER);
+
+statement ok
+INSERT INTO t1 SELECT i FROM range(0,4000) tbl(i);
+
+
+statement ok
+PRAGMA enable_lineage;
+PRAGMA persist_lineage;
+PRAGMA compress_lineage;
+
+
+query II
+select rowid, * from t1 where 2 > i  OR i > 3995 limit 3
+----
+0	0
+1	1
+3996	3996
+
+statement ok
+PRAGMA disable_lineage;
+
+query I
+select count() from LINEAGE_3_SEQ_SCAN_0
+----
+4000
+
+query III
+select rowid, in_index, out_index from LINEAGE_3_LIMIT_3
+----
+0	0	0
+1	1	1
+2	2	2
+
+statement ok
+PRAGMA clear_lineage;

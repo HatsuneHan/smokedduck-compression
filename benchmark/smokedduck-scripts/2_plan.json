@@ -1,0 +1,311 @@
+{
+   "name":  "Query", 
+   "result": 0.070097,
+   "timing": 0.070097,
+   "cardinality": 0,
+   "extra-info": "SELECT s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_phone, s_comment FROM part, supplier, partsupp, nation, region WHERE p_partkey = ps_partkey AND s_suppkey = ps_suppkey AND p_size = 15 AND p_type LIKE '%BRASS' AND s_nationkey = n_nationkey AND n_regionkey = r_regionkey AND r_name = 'EUROPE' AND ps_supplycost = ( SELECT min(ps_supplycost) FROM partsupp, supplier, nation, region WHERE p_partkey = ps_partkey AND s_suppkey = ps_suppkey AND s_nationkey = n_nationkey AND n_regionkey = r_regionkey AND r_name = 'EUROPE' ) ORDER BY s_acctbal DESC, n_name, s_name, p_partkey LIMIT 100;", 
+   "timings": [
+
+   ],
+   "children": [
+    {
+      "name": "RESULT_COLLECTOR",
+      "timing":0.000044,
+      "cardinality":0,
+      "extra_info": "",
+      "children": [
+       {
+         "name": "STREAMING_LIMIT",
+         "timing":0.000002,
+         "cardinality":100,
+         "extra_info": "",
+         "children": [
+          {
+            "name": "PROJECTION",
+            "timing":0.000031,
+            "cardinality":460,
+            "extra_info": "#0\n#1\n__internal_decompress_string(#2)\n__internal_decompress_integral_bigint(#3, 1)\n__internal_decompress_string(#4)\n#5\n__internal_decompress_string(#6)\n#7\n",
+            "children": [
+             {
+               "name": "ORDER_BY",
+               "timing":0.000246,
+               "cardinality":460,
+               "extra_info": "ORDERS:\nsupplier.s_acctbal DESC\nnation.n_name ASC\nsupplier.s_name ASC\npart.p_partkey ASC",
+               "children": [
+                {
+                  "name": "PROJECTION",
+                  "timing":0.000039,
+                  "cardinality":460,
+                  "extra_info": "#0\n#1\n__internal_compress_string_hugeint(#2)\n__internal_compress_integral_uinteger(#3, 1)\n__internal_compress_string_hugeint(#4)\n#5\n__internal_compress_string_hugeint(#6)\n#7\n",
+                  "children": [
+                   {
+                     "name": "PROJECTION",
+                     "timing":0.000002,
+                     "cardinality":460,
+                     "extra_info": "s_acctbal\ns_name\nn_name\np_partkey\np_mfgr\ns_address\ns_phone\ns_comment\n",
+                     "children": [
+                      {
+                        "name": "PROJECTION",
+                        "timing":0.000003,
+                        "cardinality":460,
+                        "extra_info": "#0\n#2\n#4\n#6\n#8\n#9\n#10\n#11\n#12\n#13\n",
+                        "children": [
+                         {
+                           "name": "FILTER",
+                           "timing":0.000085,
+                           "cardinality":460,
+                           "extra_info": "(ps_supplycost = SUBQUERY)\n[INFOSEPARATOR]\nEC: 400000",
+                           "children": [
+                            {
+                              "name": "RIGHT_DELIM_JOIN",
+                              "timing":0.001251,
+                              "cardinality":0,
+                              "extra_info": "RIGHT\np_partkey IS NOT DISTINCT FROM p_partkey\n\n[INFOSEPARATOR]\nEC: 400000\n",
+                              "children": [
+                               {
+                                 "name": "HASH_JOIN",
+                                 "timing":0.000809,
+                                 "cardinality":642,
+                                 "extra_info": "INNER\nps_suppkey = s_suppkey\n\n[INFOSEPARATOR]\nBuild Min: 1\nBuild Max: 10000\n\n[INFOSEPARATOR]\nEC: 587\n",
+                                 "children": [
+                                  {
+                                    "name": "HASH_JOIN",
+                                    "timing":0.005245,
+                                    "cardinality":2988,
+                                    "extra_info": "INNER\nps_partkey = p_partkey\n\n[INFOSEPARATOR]\nBuild Min: 1\nBuild Max: 200000\n\n[INFOSEPARATOR]\nEC: 3377\n",
+                                    "children": [
+                                     {
+                                       "name": "SEQ_SCAN ",
+                                       "timing":0.001846,
+                                       "cardinality":800000,
+                                       "extra_info": "partsupp\n[INFOSEPARATOR]\nps_partkey\nps_suppkey\nps_supplycost\n[INFOSEPARATOR]\nEC: 800000",
+                                       "children": [
+                                       ]
+                                     }
+,
+                                     {
+                                       "name": "FILTER",
+                                       "timing":0.000661,
+                                       "cardinality":747,
+                                       "extra_info": "suffix(p_type, 'BRASS')\n[INFOSEPARATOR]\nEC: 800",
+                                       "children": [
+                                        {
+                                          "name": "SEQ_SCAN ",
+                                          "timing":0.007485,
+                                          "cardinality":3907,
+                                          "extra_info": "part\n[INFOSEPARATOR]\np_partkey\np_type\np_mfgr\n[INFOSEPARATOR]\nFilters: p_size=15 AND p_size IS NOT NULL\n\n[INFOSEPARATOR]\nEC: 800",
+                                          "children": [
+                                          ]
+                                        }
+                                       ]
+                                     }
+                                    ]
+                                  }
+,
+                                  {
+                                    "name": "HASH_JOIN",
+                                    "timing":0.000170,
+                                    "cardinality":1987,
+                                    "extra_info": "INNER\ns_nationkey = n_nationkey\n\n[INFOSEPARATOR]\nBuild Min: 0\nBuild Max: 24\n\n[INFOSEPARATOR]\nEC: 2000\n",
+                                    "children": [
+                                     {
+                                       "name": "SEQ_SCAN ",
+                                       "timing":0.000783,
+                                       "cardinality":10000,
+                                       "extra_info": "supplier\n[INFOSEPARATOR]\ns_suppkey\ns_nationkey\ns_acctbal\ns_name\ns_address\ns_phone\ns_comment\n[INFOSEPARATOR]\nEC: 10000",
+                                       "children": [
+                                       ]
+                                     }
+,
+                                     {
+                                       "name": "HASH_JOIN",
+                                       "timing":0.000075,
+                                       "cardinality":5,
+                                       "extra_info": "INNER\nn_regionkey = r_regionkey\n\n[INFOSEPARATOR]\nBuild Min: 0\nBuild Max: 4\n\n[INFOSEPARATOR]\nEC: 5\n",
+                                       "children": [
+                                        {
+                                          "name": "SEQ_SCAN ",
+                                          "timing":0.000014,
+                                          "cardinality":25,
+                                          "extra_info": "nation\n[INFOSEPARATOR]\nn_nationkey\nn_regionkey\nn_name\n[INFOSEPARATOR]\nEC: 25",
+                                          "children": [
+                                          ]
+                                        }
+,
+                                        {
+                                          "name": "SEQ_SCAN ",
+                                          "timing":0.000031,
+                                          "cardinality":1,
+                                          "extra_info": "region\n[INFOSEPARATOR]\nr_regionkey\n[INFOSEPARATOR]\nFilters: r_name='EUROPE' AND r_name IS NOT NULL\n\n[INFOSEPARATOR]\nEC: 1",
+                                          "children": [
+                                          ]
+                                        }
+                                       ]
+                                     }
+                                    ]
+                                  }
+                                 ]
+                               }
+,
+                               {
+                                 "name": "HASH_JOIN",
+                                 "timing":0.000222,
+                                 "cardinality":642,
+                                 "extra_info": "RIGHT\np_partkey IS NOT DISTINCT FROM p_partkey\n\n[INFOSEPARATOR]\nEC: 400000\n",
+                                 "children": [
+                                  {
+                                    "name": "PROJECTION",
+                                    "timing":0.000000,
+                                    "cardinality":460,
+                                    "extra_info": "min(ps_supplycost)\np_partkey\n",
+                                    "children": [
+                                     {
+                                       "name": "PROJECTION",
+                                       "timing":0.000007,
+                                       "cardinality":460,
+                                       "extra_info": "__internal_decompress_integral_bigint(#0, 1)\n#1\n",
+                                       "children": [
+                                        {
+                                          "name": "HASH_GROUP_BY",
+                                          "timing":0.000776,
+                                          "cardinality":460,
+                                          "extra_info": "#0\nmin(#1)",
+                                          "children": [
+                                           {
+                                             "name": "PROJECTION",
+                                             "timing":0.000001,
+                                             "cardinality":642,
+                                             "extra_info": "p_partkey\nps_supplycost\n",
+                                             "children": [
+                                              {
+                                                "name": "PROJECTION",
+                                                "timing":0.000027,
+                                                "cardinality":642,
+                                                "extra_info": "__internal_compress_integral_uinteger(#0, 1)\n__internal_compress_integral_usmallint(#1, 1)\n#2\n__internal_compress_integral_usmallint(#3, 1)\n__internal_compress_integral_utinyint(#4, 0)\n__internal_compress_integral_utinyint(#5, 0)\n__internal_compress_integral_utinyint(#6, 0)\n__internal_compress_integral_utinyint(#7, 0)\n#8\n",
+                                                "children": [
+                                                 {
+                                                   "name": "HASH_JOIN",
+                                                   "timing":0.007536,
+                                                   "cardinality":642,
+                                                   "extra_info": "INNER\nps_partkey = p_partkey\n\n[INFOSEPARATOR]\nEC: 800000\n",
+                                                   "children": [
+                                                    {
+                                                      "name": "HASH_JOIN",
+                                                      "timing":0.006862,
+                                                      "cardinality":158960,
+                                                      "extra_info": "INNER\nn_regionkey = r_regionkey\n\n[INFOSEPARATOR]\nBuild Min: 0\nBuild Max: 4\n\n[INFOSEPARATOR]\nEC: 800000\n",
+                                                      "children": [
+                                                       {
+                                                         "name": "HASH_JOIN",
+                                                         "timing":0.009096,
+                                                         "cardinality":800000,
+                                                         "extra_info": "INNER\ns_nationkey = n_nationkey\n\n[INFOSEPARATOR]\nBuild Min: 0\nBuild Max: 24\n\n[INFOSEPARATOR]\nEC: 800000\n",
+                                                         "children": [
+                                                          {
+                                                            "name": "HASH_JOIN",
+                                                            "timing":0.012650,
+                                                            "cardinality":800000,
+                                                            "extra_info": "INNER\nps_suppkey = s_suppkey\n\n[INFOSEPARATOR]\nBuild Min: 1\nBuild Max: 10000\n\n[INFOSEPARATOR]\nEC: 800000\n",
+                                                            "children": [
+                                                             {
+                                                               "name": "SEQ_SCAN ",
+                                                               "timing":0.001564,
+                                                               "cardinality":800000,
+                                                               "extra_info": "partsupp\n[INFOSEPARATOR]\nps_partkey\nps_suppkey\nps_supplycost\n[INFOSEPARATOR]\nEC: 800000",
+                                                               "children": [
+                                                               ]
+                                                             }
+,
+                                                             {
+                                                               "name": "SEQ_SCAN ",
+                                                               "timing":0.000040,
+                                                               "cardinality":10000,
+                                                               "extra_info": "supplier\n[INFOSEPARATOR]\ns_suppkey\ns_nationkey\n[INFOSEPARATOR]\nEC: 10000",
+                                                               "children": [
+                                                               ]
+                                                             }
+                                                            ]
+                                                          }
+,
+                                                          {
+                                                            "name": "SEQ_SCAN ",
+                                                            "timing":0.000008,
+                                                            "cardinality":25,
+                                                            "extra_info": "nation\n[INFOSEPARATOR]\nn_nationkey\nn_regionkey\n[INFOSEPARATOR]\nEC: 25",
+                                                            "children": [
+                                                            ]
+                                                          }
+                                                         ]
+                                                       }
+,
+                                                       {
+                                                         "name": "SEQ_SCAN ",
+                                                         "timing":0.000016,
+                                                         "cardinality":1,
+                                                         "extra_info": "region\n[INFOSEPARATOR]\nr_regionkey\n[INFOSEPARATOR]\nFilters: r_name='EUROPE' AND r_name IS NOT NULL\n\n[INFOSEPARATOR]\nEC: 1",
+                                                         "children": [
+                                                         ]
+                                                       }
+                                                      ]
+                                                    }
+,
+                                                    {
+                                                      "name": "DELIM_SCAN",
+                                                      "timing":0.000000,
+                                                      "cardinality":0,
+                                                      "extra_info": "",
+                                                      "children": [
+                                                      ]
+                                                    }
+                                                   ]
+                                                 }
+                                                ]
+                                              }
+                                             ]
+                                           }
+                                          ]
+                                        }
+                                       ]
+                                     }
+                                    ]
+                                  }
+,
+                                  {
+                                    "name": "DUMMY_SCAN",
+                                    "timing":0.000000,
+                                    "cardinality":0,
+                                    "extra_info": "",
+                                    "children": [
+                                    ]
+                                  }
+                                 ]
+                               }
+,
+                               {
+                                 "name": "HASH_GROUP_BY",
+                                 "timing":0.000019,
+                                 "cardinality":460,
+                                 "extra_info": "#0",
+                                 "children": [
+                                 ]
+                               }
+                              ]
+                            }
+                           ]
+                         }
+                        ]
+                      }
+                     ]
+                   }
+                  ]
+                }
+               ]
+             }
+            ]
+          }
+         ]
+       }
+      ]
+    }
+   ]
+}

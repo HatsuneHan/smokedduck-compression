@@ -1,0 +1,175 @@
+{
+   "name":  "Query", 
+   "result": 0.088124,
+   "timing": 0.088124,
+   "cardinality": 0,
+   "extra-info": "SELECT p_brand, p_type, p_size, count(DISTINCT ps_suppkey) AS supplier_cnt FROM partsupp, part WHERE p_partkey = ps_partkey AND p_brand <> 'Brand#45' AND p_type NOT LIKE 'MEDIUM POLISHED%' AND p_size IN (49, 14, 23, 45, 19, 3, 36, 9) AND ps_suppkey NOT IN ( SELECT s_suppkey FROM supplier WHERE s_comment LIKE '%Customer%Complaints%') GROUP BY p_brand, p_type, p_size ORDER BY supplier_cnt DESC, p_brand, p_type, p_size;", 
+   "timings": [
+
+   ],
+   "children": [
+    {
+      "name": "RESULT_COLLECTOR",
+      "timing":0.001085,
+      "cardinality":0,
+      "extra_info": "",
+      "children": [
+       {
+         "name": "PROJECTION",
+         "timing":0.000355,
+         "cardinality":18314,
+         "extra_info": "__internal_decompress_string(#0)\n#1\n__internal_decompress_integral_integer(#2, 1)\n#3\n",
+         "children": [
+          {
+            "name": "ORDER_BY",
+            "timing":0.001687,
+            "cardinality":18314,
+            "extra_info": "ORDERS:\ncount(DISTINCT partsupp.ps_suppkey) DESC\npart.p_brand ASC\npart.p_type ASC\npart.p_size ASC",
+            "children": [
+             {
+               "name": "PROJECTION",
+               "timing":0.000172,
+               "cardinality":18314,
+               "extra_info": "__internal_compress_string_hugeint(#0)\n#1\n__internal_compress_integral_utinyint(#2, 1)\n#3\n",
+               "children": [
+                {
+                  "name": "PROJECTION",
+                  "timing":0.000362,
+                  "cardinality":18314,
+                  "extra_info": "__internal_decompress_string(#0)\n#1\n__internal_decompress_integral_integer(#2, 1)\n#3\n",
+                  "children": [
+                   {
+                     "name": "HASH_GROUP_BY",
+                     "timing":0.021020,
+                     "cardinality":18314,
+                     "extra_info": "#0\n#1\n#2\ncount(DISTINCT #3)",
+                     "children": [
+                      {
+                        "name": "PROJECTION",
+                        "timing":0.000147,
+                        "cardinality":118274,
+                        "extra_info": "p_brand\np_type\np_size\nps_suppkey\n",
+                        "children": [
+                         {
+                           "name": "PROJECTION",
+                           "timing":0.004255,
+                           "cardinality":118274,
+                           "extra_info": "#0\n__internal_compress_string_hugeint(#1)\n#2\n__internal_compress_integral_utinyint(#3, 1)\n#4\n",
+                           "children": [
+                            {
+                              "name": "PROJECTION",
+                              "timing":0.000207,
+                              "cardinality":118274,
+                              "extra_info": "#1\n#3\n#4\n#5\n#6\n",
+                              "children": [
+                               {
+                                 "name": "FILTER",
+                                 "timing":0.001072,
+                                 "cardinality":118274,
+                                 "extra_info": "(NOT SUBQUERY)\n[INFOSEPARATOR]\nEC: 33778",
+                                 "children": [
+                                  {
+                                    "name": "HASH_JOIN",
+                                    "timing":0.004782,
+                                    "cardinality":118324,
+                                    "extra_info": "MARK\nps_suppkey = #0\n\n[INFOSEPARATOR]\nEC: 168893\n",
+                                    "children": [
+                                     {
+                                       "name": "HASH_JOIN",
+                                       "timing":0.011062,
+                                       "cardinality":118324,
+                                       "extra_info": "INNER\nps_partkey = p_partkey\n\n[INFOSEPARATOR]\nBuild Min: 1\nBuild Max: 200000\n\n[INFOSEPARATOR]\nEC: 168893\n",
+                                       "children": [
+                                        {
+                                          "name": "SEQ_SCAN ",
+                                          "timing":0.001967,
+                                          "cardinality":800000,
+                                          "extra_info": "partsupp\n[INFOSEPARATOR]\nps_partkey\nps_suppkey\n[INFOSEPARATOR]\nEC: 800000",
+                                          "children": [
+                                          ]
+                                        }
+,
+                                        {
+                                          "name": "FILTER",
+                                          "timing":0.002033,
+                                          "cardinality":29581,
+                                          "extra_info": "(IN (...) AND (p_brand != 'Brand#45') AND (NOT prefix(p_type, 'MEDIUM POLISHED')))\n[INFOSEPARATOR]\nEC: 40000",
+                                          "children": [
+                                           {
+                                             "name": "HASH_JOIN",
+                                             "timing":0.001724,
+                                             "cardinality":200000,
+                                             "extra_info": "MARK\np_size = #0\n\n[INFOSEPARATOR]\nEC: 200000\n",
+                                             "children": [
+                                              {
+                                                "name": "SEQ_SCAN ",
+                                                "timing":0.007925,
+                                                "cardinality":200000,
+                                                "extra_info": "part\n[INFOSEPARATOR]\np_partkey\np_brand\np_type\np_size\n[INFOSEPARATOR]\nEC: 200000",
+                                                "children": [
+                                                ]
+                                              }
+,
+                                              {
+                                                "name": "COLUMN_DATA_SCAN",
+                                                "timing":0.000006,
+                                                "cardinality":8,
+                                                "extra_info": "",
+                                                "children": [
+                                                ]
+                                              }
+                                             ]
+                                           }
+                                          ]
+                                        }
+                                       ]
+                                     }
+,
+                                     {
+                                       "name": "PROJECTION",
+                                       "timing":0.000001,
+                                       "cardinality":4,
+                                       "extra_info": "s_suppkey\n",
+                                       "children": [
+                                        {
+                                          "name": "FILTER",
+                                          "timing":0.000257,
+                                          "cardinality":4,
+                                          "extra_info": "(s_comment ~~ '%Customer%Complaints%')\n[INFOSEPARATOR]\nEC: 2000",
+                                          "children": [
+                                           {
+                                             "name": "SEQ_SCAN ",
+                                             "timing":0.000401,
+                                             "cardinality":10000,
+                                             "extra_info": "supplier\n[INFOSEPARATOR]\ns_comment\ns_suppkey\n[INFOSEPARATOR]\nEC: 10000",
+                                             "children": [
+                                             ]
+                                           }
+                                          ]
+                                        }
+                                       ]
+                                     }
+                                    ]
+                                  }
+                                 ]
+                               }
+                              ]
+                            }
+                           ]
+                         }
+                        ]
+                      }
+                     ]
+                   }
+                  ]
+                }
+               ]
+             }
+            ]
+          }
+         ]
+       }
+      ]
+    }
+   ]
+}

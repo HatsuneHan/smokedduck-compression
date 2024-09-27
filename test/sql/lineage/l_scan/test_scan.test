@@ -17,10 +17,12 @@ INSERT INTO t1 SELECT i FROM range(0,5) tabl(i);
 statement ok
 PRAGMA enable_lineage;
 PRAGMA persist_lineage;
+PRAGMA compress_lineage;
+
 
 # filter from different chunks
 query II
-select rowid, * from t1 where i < 2
+SELECT rowid, t1.* FROM t1 WHERE i < 2
 ----
 0	0
 1	1
@@ -31,7 +33,7 @@ statement ok
 PRAGMA disable_lineage;
 
 query III
-SELECT rowid, in_index, out_index FROM LINEAGE_2_SEQ_SCAN_0
+SELECT rowid, in_index, out_index FROM LINEAGE_3_SEQ_SCAN_0
 ----
 0	0	0
 1	1	1

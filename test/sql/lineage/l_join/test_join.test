@@ -1,0 +1,55 @@
+# name: test/sql/lineage/l_join/test_join.test
+# description: Test Perfect Hash Aggregate Lineage
+# group: [l_join]
+
+statement ok
+CREATE TABLE t1(i INTEGER, j INTEGER);
+CREATE TABLE t2(j INTEGER, k INTEGER);
+
+statement ok
+INSERT INTO t1 VALUES (1, 5), (1, 4), (2, 2), (4, 1), (5, 4);
+INSERT INTO t2 VALUES (3, 7), (2, 4), (2, 5), (3, 2), (4, 1);
+
+statement ok
+PRAGMA enable_lineage;
+PRAGMA persist_lineage;
+PRAGMA compress_lineage;
+
+query III
+select t1.i, t1.j, t2.k from t1 JOIN t2 ON t1.j = t2.j;
+----
+2	2	4
+2	2	5
+5	4	1
+1	4	1
+
+statement ok
+PRAGMA disable_lineage;
+PRAGMA disable_optimizer;
+
+query II
+select in_index, out_index from LINEAGE_3_SEQ_SCAN_0
+----
+0	0
+1	1
+2	2
+3	3
+4	4
+
+query II
+select in_index, out_index from LINEAGE_3_SEQ_SCAN_1
+----
+1	0
+2	1
+4	2
+
+query III
+select lhs_index, rhs_index, out_index from LINEAGE_3_HASH_JOIN_2
+----
+1	1	0
+2	1	1
+4	2	2
+4	0	3
+
+
+

@@ -1,0 +1,117 @@
+{
+   "name":  "Query", 
+   "result": 0.369386,
+   "timing": 0.369386,
+   "cardinality": 0,
+   "extra-info": "SELECT c_count, count(*) AS custdist FROM ( SELECT c_custkey, count(o_orderkey) FROM customer LEFT OUTER JOIN orders ON c_custkey = o_custkey AND o_comment NOT LIKE '%special%requests%' GROUP BY c_custkey) AS c_orders (c_custkey, c_count) GROUP BY c_count ORDER BY custdist DESC, c_count DESC;", 
+   "timings": [
+
+   ],
+   "children": [
+    {
+      "name": "RESULT_COLLECTOR",
+      "timing":0.000010,
+      "cardinality":0,
+      "extra_info": "",
+      "children": [
+       {
+         "name": "ORDER_BY",
+         "timing":0.000046,
+         "cardinality":42,
+         "extra_info": "ORDERS:\ncount_star() DESC\nc_orders.c_count DESC",
+         "children": [
+          {
+            "name": "HASH_GROUP_BY",
+            "timing":0.005274,
+            "cardinality":42,
+            "extra_info": "#0\ncount_star()",
+            "children": [
+             {
+               "name": "PROJECTION",
+               "timing":0.000018,
+               "cardinality":150000,
+               "extra_info": "c_count\n",
+               "children": [
+                {
+                  "name": "PROJECTION",
+                  "timing":0.000022,
+                  "cardinality":150000,
+                  "extra_info": "count(o_orderkey)\n",
+                  "children": [
+                   {
+                     "name": "PROJECTION",
+                     "timing":0.000155,
+                     "cardinality":150000,
+                     "extra_info": "__internal_decompress_integral_bigint(#0, 1)\n#1\n",
+                     "children": [
+                      {
+                        "name": "HASH_GROUP_BY",
+                        "timing":0.094216,
+                        "cardinality":150000,
+                        "extra_info": "#0\ncount(#1)",
+                        "children": [
+                         {
+                           "name": "PROJECTION",
+                           "timing":0.000507,
+                           "cardinality":1534302,
+                           "extra_info": "c_custkey\no_orderkey\n",
+                           "children": [
+                            {
+                              "name": "PROJECTION",
+                              "timing":0.005566,
+                              "cardinality":1534302,
+                              "extra_info": "__internal_compress_integral_uinteger(#0, 1)\n#1\n#2\n__internal_compress_integral_uinteger(#3, 1)\n",
+                              "children": [
+                               {
+                                 "name": "HASH_JOIN",
+                                 "timing":0.114650,
+                                 "cardinality":1534302,
+                                 "extra_info": "RIGHT\no_custkey = c_custkey\n\n[INFOSEPARATOR]\nEC: 300000\n",
+                                 "children": [
+                                  {
+                                    "name": "FILTER",
+                                    "timing":0.083792,
+                                    "cardinality":1484298,
+                                    "extra_info": "(o_comment !~~ '%special%requests%')\n[INFOSEPARATOR]\nEC: 300000",
+                                    "children": [
+                                     {
+                                       "name": "SEQ_SCAN ",
+                                       "timing":0.053047,
+                                       "cardinality":1500000,
+                                       "extra_info": "orders\n[INFOSEPARATOR]\no_custkey\no_comment\no_orderkey\n[INFOSEPARATOR]\nEC: 1500000",
+                                       "children": [
+                                       ]
+                                     }
+                                    ]
+                                  }
+,
+                                  {
+                                    "name": "SEQ_SCAN ",
+                                    "timing":0.000256,
+                                    "cardinality":150000,
+                                    "extra_info": "customer\n[INFOSEPARATOR]\nc_custkey\n[INFOSEPARATOR]\nEC: 150000",
+                                    "children": [
+                                    ]
+                                  }
+                                 ]
+                               }
+                              ]
+                            }
+                           ]
+                         }
+                        ]
+                      }
+                     ]
+                   }
+                  ]
+                }
+               ]
+             }
+            ]
+          }
+         ]
+       }
+      ]
+    }
+   ]
+}

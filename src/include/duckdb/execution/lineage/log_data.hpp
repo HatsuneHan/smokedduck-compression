@@ -123,7 +123,7 @@ struct nlj_artifact {
 */
 class Log {
 public:
-	explicit Log() : capture(false) {}
+	explicit Log() : capture(false), strategy_size(0), strategy_time(0.0), uncompressed_size(0) {}
 
   std::pair<int, int> LatestLSN();
   void SetLatestLSN(std::pair<int, int>);
@@ -176,6 +176,10 @@ public:
     vector<std::pair<int, int>> cached;
 
     std::pair<int, int> latest;
+
+	size_t strategy_size;
+	size_t uncompressed_size;
+	double strategy_time;
 
 private:
 };

@@ -53,9 +53,22 @@ OperatorResultType PhysicalFilter::ExecuteInternal(ExecutionContext &context, Da
 #ifdef LINEAGE
 		if (lineage_manager->capture && active_log) {
 			if (lineage_manager->compress) {
+				auto start = std::chrono::high_resolution_clock::now();
+
+				// one time loop
 				vector<idx_t> empty_vector;
 				vector<idx_t> empty_vector_idx_t;
 				vector<idx_t> empty_vector_is_compressed;
+
+				size_t test_sum = 0;
+				for (idx_t i = 0; i < result_count; i++) {
+					test_sum += state.sel.data()[i];
+				}
+
+				auto end = std::chrono::high_resolution_clock::now();
+				std::chrono::duration<double> duration = end - start;
+
+				active_log->strategy_time += duration.count();
 
 				active_log->compressed_filter_log.PushBack(empty_vector, empty_vector_idx_t, empty_vector_is_compressed,
 				                                           0, result_count, active_lop->children[0]->out_start, 0);
@@ -73,12 +86,70 @@ OperatorResultType PhysicalFilter::ExecuteInternal(ExecutionContext &context, Da
 		if (lineage_manager->capture && active_log && result_count) {
 			if (lineage_manager->compress) {
 
+				auto start = std::chrono::high_resolution_clock::now();
+
+				// one time compression
 				vector<vector<idx_t>> result_vector = ChangeSelToBitMap(state.sel.data(), result_count, CompressionMethod::LZ4);
 
 				vector<idx_t> &bitmap_vector = result_vector[0];
 				vector<idx_t> &bitmap_sizes = result_vector[1];
 				vector<idx_t> &bitmap_is_compressed = result_vector[2];
 				vector<idx_t> &use_bitmap = result_vector[3];
+
+				// one time decompression
+				{
+					size_t bitmap_num = bitmap_vector.size();
+					size_t offset = 0;
+
+					sel_t* sel_copy;
+
+					if (bitmap_num) {
+						if (use_bitmap[0]){
+							sel_copy = new sel_t[result_count];
+							size_t index = 0;
+
+							for(size_t i = 0; i < bitmap_num; i++){
+
+								unsigned char* decompressed_bitmap = DecompressBitmap(bitmap_sizes[i],
+								                                                      bitmap_is_compressed[i],
+								                                                      reinterpret_cast<unsigned char*>(bitmap_vector[i]));
+
+								for (size_t j = 0; j < STANDARD_VECTOR_SIZE; ++j) {
+									if (decompressed_bitmap[j / 8] & (1 << (7 - (j % 8)))) {
+										sel_copy[index++] = static_cast<sel_t>(j) + offset; // PostProcess() here
+									}
+								}
+							}
+						}
+
+						else {
+							sel_copy = reinterpret_cast<sel_t*>(bitmap_vector[0]);
+							for(size_t i = 0; i < result_count; i++){
+								sel_copy[i] += offset;
+							}
+						}
+					}
+				}
+
+				// one time loop
+				size_t test_sum = 0;
+				for (idx_t i = 0; i < result_count; i++) {
+					test_sum += state.sel.data()[i];
+				}
+
+				auto end = std::chrono::high_resolution_clock::now();
+				std::chrono::duration<double> duration = end - start;
+
+				active_log->strategy_time += duration.count();
+
+				size_t acc_size = 0;
+				for (idx_t i = 0; i < bitmap_vector.size(); i++) {
+					acc_size += bitmap_sizes[i];
+				}
+				active_log->strategy_size += acc_size;
+				active_log->uncompressed_size += sizeof(sel_t) * result_count;
+
+				std::cout << "Original size : " << sizeof(sel_t) * result_count << " Compressed size : " << acc_size << std::endl;
 
 				active_log->compressed_filter_log.PushBack(bitmap_vector, bitmap_sizes, bitmap_is_compressed,
 				                                           bitmap_vector.size(), result_count,

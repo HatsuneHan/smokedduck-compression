@@ -28,6 +28,11 @@ static unique_ptr<FunctionData> DuckDBQueriesListBind(ClientContext &context, Ta
 	names.emplace_back("size_bytes_max");
 	return_types.emplace_back(LogicalType::INTEGER);
 
+    // test
+	names.emplace_back("physical_op_size");
+	return_types.emplace_back(LogicalType::LIST(LogicalTypeId::INTEGER));
+	//
+
 	names.emplace_back("size_bytes_min");
 	return_types.emplace_back(LogicalType::INTEGER);
 
@@ -98,6 +103,32 @@ string PlanToString(shared_ptr<OperatorLineage> lop) {
 	return "{\"name\": \"" + lop->name + "\", \"opid\": \"" + std::to_string(lop->operator_id) + "\", \"children\": [" + child_str + "],\"table\": \"" + lop->table_name +  "\",\"extra\": \"" + JSONSanitize(lop->extra)+ "\"}";
 }
 
+int extractOperatorID(const std::string& str) {
+	std::string digits;
+	for (char ch : str) {
+		if (isdigit(ch)) {
+			digits += ch;
+		}
+	}
+
+	if (!digits.empty()) {
+		return std::stoi(digits);
+	}
+
+	return -1;
+}
+
+string extractOperatorName(const std::string& str) {
+	std::string digits;
+	for (char ch : str) {
+		if (!isdigit(ch)) {
+			digits += ch;
+		}
+	}
+
+	return digits;
+}
+
 //! Create table to store executed queries with their IDs
 //! Table name: queries_list
 //! Schema: (INT query_id, varchar query)
@@ -116,13 +147,38 @@ void DuckDBQueriesListFunction(ClientContext &context, TableFunctionInput &data_
 
 	std::vector<int64_t> stats(3, 0);
 
+	std::unordered_map<string, size_t> lop_size;
+	int physical_op_num = -1;
+
 	if(lineage_manager->compress) {
-		idx_t compressed_total_size = lineage_manager->GetCompressedArtifactSize();
+		idx_t compressed_total_size = lineage_manager->GetCompressedArtifactSize(lop_size, physical_op_num);
 		stats[0] = compressed_total_size;
 	} else {
 		idx_t uncompressed_total_size = lineage_manager->GetUncompressedArtifactSize();
 		stats[0] = uncompressed_total_size;
 	}
+
+//	std::cout << std::endl;
+//	std::cout << "Physical op num: " << physical_op_num << std::endl;
+//	for (const auto& pair : lop_size){
+//		std::cout << "Physical Operator: " << pair.first << " size: " << pair.second << std::endl;
+//	}
+
+	vector<Value> lop_size_list(physical_op_num, 0);
+	for (const auto& pair : lop_size){
+		int physical_op_id = extractOperatorID(pair.first);
+//		string physical_op_name = extractOperatorName(pair.first);
+//		std::cout << "Physical Operator ID: " << physical_op_id << " Physical Operator Name: " << physical_op_name << std::endl;
+
+		lop_size_list[physical_op_id] = Value::BIGINT(pair.second);
+	}
+
+	// print lop_size_list
+//	std::cout << "lop_size_list: ";
+//	for (int i = 0; i < lop_size_list.size(); i++) {
+//		std::cout << lop_size_list[i] << " ";
+//	}
+//	std::cout << std::endl;
 
 	while (data.offset < query_to_id.size() && count < STANDARD_VECTOR_SIZE) {
 //		std::cout << "Query ID: " << data.offset << " Query To ID Size: " << query_to_id.size() << std::endl;
@@ -135,6 +191,9 @@ void DuckDBQueriesListFunction(ClientContext &context, TableFunctionInput &data_
 
     // size_bytes_max
 		output.SetValue(col++, count,Value::BIGINT(stats[0]));
+
+		// test
+		output.SetValue(col++, count,Value::LIST(lop_size_list));
 
     // size_bytes_min
 		output.SetValue(col++, count,Value::INTEGER(stats[2]));

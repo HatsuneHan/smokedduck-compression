@@ -1,0 +1,60 @@
+# name: test/sql/lineage/l_nested_loop_join/test_nested_loop_join.test
+# description: Test Perfect Hash Aggregate Lineage
+# group: [l_nested_loop_join]
+
+statement ok
+PRAGMA disable_optimizer;
+
+statement ok
+CREATE TABLE t1(i INTEGER, j INTEGER);
+
+statement ok
+INSERT INTO t1(i, j) SELECT i, 100001 - i FROM generate_series(1, 100000) AS s(i);
+
+statement ok
+CREATE TABLE t2(j INTEGER, k INTEGER);
+
+statement ok
+INSERT INTO t2(j, k) SELECT j, 4 - j FROM generate_series(1, 4) AS s(j);
+
+statement ok
+PRAGMA enable_lineage;
+PRAGMA persist_lineage;
+
+query III
+select Count() from t1 JOIN t2 ON t1.j = t2.j;
+----
+3997	4	1
+3998	3	2
+3999	2	5
+3998	3	7
+3999	2	4
+
+statement ok
+PRAGMA disable_lineage;
+PRAGMA disable_optimizer;
+
+query II
+select in_index, out_index from LINEAGE_2_SEQ_SCAN_0
+----
+3996	0
+3997	1
+3998	2
+
+query II
+select in_index, out_index from LINEAGE_2_SEQ_SCAN_1
+----
+1	0
+2	1
+4	2
+
+query III
+select lhs_index, rhs_index, out_index from LINEAGE_2_HASH_JOIN_2
+----
+1	1	0
+2	1	1
+4	2	2
+4	0	3
+
+
+

@@ -1,0 +1,42 @@
+# name: test/sql/lineage/l_order_by/test_order_by.test
+# description: Test OrderBy Lineage
+# group: [l_order_by]
+
+statement ok
+CREATE TABLE t1(i INTEGER, j INTEGER);
+
+statement ok
+INSERT INTO t1(i, j) SELECT i, 4001 - i FROM generate_series(1, 4000) AS s(i);
+INSERT INTO t1(i, j) VALUES (114514, 2);
+
+statement ok
+PRAGMA enable_lineage;
+PRAGMA persist_lineage;
+PRAGMA compress_lineage
+
+query II
+select t1.i, t1.j from t1 Order by t1.j Limit 5
+----
+4000	1
+3999	2
+114514	2
+3998	3
+3997	4
+
+statement ok
+PRAGMA disable_lineage;
+PRAGMA disable_optimizer;
+
+query I
+SELECT COUNT() FROM LINEAGE_3_SEQ_SCAN_0
+----
+4001
+
+query III
+SELECT rowid, in_index, out_index FROM LINEAGE_3_ORDER_BY_2 LIMIT 5
+----
+0	3999	0
+1	3998	1
+2	4000	2
+3	3997	3
+4	3996	4
