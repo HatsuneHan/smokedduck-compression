@@ -221,12 +221,25 @@ public:
 				idx_t bitmap_num = artifacts->start_bitmap_idx[i + 1] - start_bitmap_idx;
 
 				for(size_t j = 0; j < bitmap_num; j++){
-					if(artifacts->count[i] >= 32){
-						unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[start_bitmap_idx + j]);
-						delete[] sel_addr;
-					} else {
+					if(artifacts->count[i] < 16){
 						sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx + j]);
 						delete[] sel_addr;
+					} else {
+						idx_t use_bitmap = artifacts->use_bitmap[i];
+						idx_t bitmap_is_compressed = artifacts->bitmap_is_compressed[start_bitmap_idx + j];
+
+						if(use_bitmap == 0 && bitmap_is_compressed == 1){
+							if(artifacts->count[i] < 30){
+								sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx + j]);
+								delete[] sel_addr;
+							} else {
+								Compressed64ListWithSize* sel_addr = reinterpret_cast<Compressed64ListWithSize*>(artifacts->bitmap[start_bitmap_idx + j]);
+								delete sel_addr;
+							}
+						} else {
+							unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[start_bitmap_idx + j]);
+							delete[] sel_addr;
+						}
 					}
 				}
 			}
@@ -242,12 +255,25 @@ public:
 				idx_t bitmap_num = artifacts->start_bitmap_idx[i + 1] - start_bitmap_idx;
 
 				for(size_t j = 0; j < bitmap_num; j++){
-					if(artifacts->count[i] >= 32){
-						unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[start_bitmap_idx + j]);
-						delete[] sel_addr;
-					} else {
+					if(artifacts->count[i] < 16){
 						sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx + j]);
 						delete[] sel_addr;
+					} else {
+						idx_t use_bitmap = artifacts->use_bitmap[i];
+						idx_t bitmap_is_compressed = artifacts->bitmap_is_compressed[start_bitmap_idx + j];
+
+						if(use_bitmap == 0 && bitmap_is_compressed == 1){
+							if(artifacts->count[i] < 30){
+								sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx + j]);
+								delete[] sel_addr;
+							} else {
+								Compressed64ListWithSize* sel_addr = reinterpret_cast<Compressed64ListWithSize*>(artifacts->bitmap[start_bitmap_idx + j]);
+								delete sel_addr;
+							}
+						} else {
+							unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[start_bitmap_idx + j]);
+							delete[] sel_addr;
+						}
 					}
 				}
 			}
@@ -335,12 +361,25 @@ public:
 				idx_t bitmap_num = artifacts->start_bitmap_idx[i + 1] - start_bitmap_idx;
 
 				for(size_t j = 0; j < bitmap_num; j++){
-					if(artifacts->count[i] >= 32){
-						unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[start_bitmap_idx + j]);
-						delete[] sel_addr;
-					} else {
+					if(artifacts->count[i] < 16){
 						sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx + j]);
 						delete[] sel_addr;
+					} else {
+						idx_t use_bitmap = artifacts->use_bitmap[i];
+						idx_t bitmap_is_compressed = artifacts->bitmap_is_compressed[start_bitmap_idx + j];
+
+						if(use_bitmap == 0 && bitmap_is_compressed == 1){
+							if(artifacts->count[i] < 30){
+								sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx + j]);
+								delete[] sel_addr;
+							} else {
+								Compressed64ListWithSize* sel_addr = reinterpret_cast<Compressed64ListWithSize*>(artifacts->bitmap[start_bitmap_idx + j]);
+								delete sel_addr;
+							}
+						} else {
+							unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[start_bitmap_idx + j]);
+							delete[] sel_addr;
+						}
 					}
 				}
 			}
@@ -356,12 +395,25 @@ public:
 				idx_t bitmap_num = artifacts->start_bitmap_idx[i + 1] - start_bitmap_idx;
 
 				for(size_t j = 0; j < bitmap_num; j++){
-					if(artifacts->count[i] >= 32){
-						unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[start_bitmap_idx + j]);
-						delete[] sel_addr;
-					} else {
+					if(artifacts->count[i] < 16){
 						sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx + j]);
 						delete[] sel_addr;
+					} else {
+						idx_t use_bitmap = artifacts->use_bitmap[i];
+						idx_t bitmap_is_compressed = artifacts->bitmap_is_compressed[start_bitmap_idx + j];
+
+						if(use_bitmap == 0 && bitmap_is_compressed == 1){
+							if(artifacts->count[i] < 30){
+								sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx + j]);
+								delete[] sel_addr;
+							} else {
+								Compressed64ListWithSize* sel_addr = reinterpret_cast<Compressed64ListWithSize*>(artifacts->bitmap[start_bitmap_idx + j]);
+								delete sel_addr;
+							}
+						} else {
+							unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[start_bitmap_idx + j]);
+							delete[] sel_addr;
+						}
 					}
 				}
 			}
@@ -861,15 +913,29 @@ public:
 				idx_t bitmap_num = artifacts->start_bitmap_idx[i + 1] - start_bitmap_idx;
 
 				for(size_t j = 0; j < bitmap_num; j++){
-					if(artifacts->count[i] >= 32){
-						unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[start_bitmap_idx + j]);
-						delete[] sel_addr;
-					} else {
+					if(artifacts->count[i] < 16){
 						sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx + j]);
 						delete[] sel_addr;
+					} else {
+						idx_t use_bitmap = artifacts->use_bitmap[i];
+						idx_t bitmap_is_compressed = artifacts->bitmap_is_compressed[start_bitmap_idx + j];
+
+						if(use_bitmap == 0 && bitmap_is_compressed == 1){
+							if(artifacts->count[i] < 30){
+								sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx + j]);
+								delete[] sel_addr;
+							} else {
+								Compressed64ListWithSize* sel_addr = reinterpret_cast<Compressed64ListWithSize*>(artifacts->bitmap[start_bitmap_idx + j]);
+								delete sel_addr;
+							}
+						} else {
+							unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[start_bitmap_idx + j]);
+							delete[] sel_addr;
+						}
 					}
 				}
 			}
+
 		}
 
 		delete artifacts;
@@ -914,12 +980,25 @@ public:
 				idx_t bitmap_num = artifacts->start_bitmap_idx[i + 1] - start_bitmap_idx;
 
 				for(size_t j = 0; j < bitmap_num; j++){
-					if(artifacts->count[i] >= 32){
-						unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[start_bitmap_idx + j]);
-						delete[] sel_addr;
-					} else {
+					if(artifacts->count[i] < 16){
 						sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx + j]);
 						delete[] sel_addr;
+					} else {
+						idx_t use_bitmap = artifacts->use_bitmap[i];
+						idx_t bitmap_is_compressed = artifacts->bitmap_is_compressed[start_bitmap_idx + j];
+
+						if(use_bitmap == 0 && bitmap_is_compressed == 1){
+							if(artifacts->count[i] < 30){
+								sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx + j]);
+								delete[] sel_addr;
+							} else {
+								Compressed64ListWithSize* sel_addr = reinterpret_cast<Compressed64ListWithSize*>(artifacts->bitmap[start_bitmap_idx + j]);
+								delete sel_addr;
+							}
+						} else {
+							unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[start_bitmap_idx + j]);
+							delete[] sel_addr;
+						}
 					}
 				}
 			}
@@ -1014,12 +1093,25 @@ public:
 				idx_t bitmap_num = artifacts->start_bitmap_idx[i + 1] - start_bitmap_idx;
 
 				for(size_t j = 0; j < bitmap_num; j++){
-					if(artifacts->count[i] >= 32){
-						unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[start_bitmap_idx + j]);
-						delete[] sel_addr;
-					} else {
+					if(artifacts->count[i] < 16){
 						sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx + j]);
 						delete[] sel_addr;
+					} else {
+						idx_t use_bitmap = artifacts->use_bitmap[i];
+						idx_t bitmap_is_compressed = artifacts->bitmap_is_compressed[start_bitmap_idx + j];
+
+						if(use_bitmap == 0 && bitmap_is_compressed == 1){
+							if(artifacts->count[i] < 30){
+								sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx + j]);
+								delete[] sel_addr;
+							} else {
+								Compressed64ListWithSize* sel_addr = reinterpret_cast<Compressed64ListWithSize*>(artifacts->bitmap[start_bitmap_idx + j]);
+								delete sel_addr;
+							}
+						} else {
+							unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[start_bitmap_idx + j]);
+							delete[] sel_addr;
+						}
 					}
 				}
 			}
@@ -1046,12 +1138,25 @@ public:
 				idx_t bitmap_num = artifacts->start_bitmap_idx[i + 1] - start_bitmap_idx;
 
 				for(size_t j = 0; j < bitmap_num; j++){
-					if(artifacts->count[i] >= 32){
-						unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[start_bitmap_idx + j]);
-						delete[] sel_addr;
-					} else {
+					if(artifacts->count[i] < 16){
 						sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx + j]);
 						delete[] sel_addr;
+					} else {
+						idx_t use_bitmap = artifacts->use_bitmap[i];
+						idx_t bitmap_is_compressed = artifacts->bitmap_is_compressed[start_bitmap_idx + j];
+
+						if(use_bitmap == 0 && bitmap_is_compressed == 1){
+							if(artifacts->count[i] < 30){
+								sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx + j]);
+								delete[] sel_addr;
+							} else {
+								Compressed64ListWithSize* sel_addr = reinterpret_cast<Compressed64ListWithSize*>(artifacts->bitmap[start_bitmap_idx + j]);
+								delete sel_addr;
+							}
+						} else {
+							unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[start_bitmap_idx + j]);
+							delete[] sel_addr;
+						}
 					}
 				}
 			}
@@ -1454,12 +1559,25 @@ public:
 				idx_t bitmap_num = artifacts->start_bitmap_idx[i + 1] - start_bitmap_idx;
 
 				for(size_t j = 0; j < bitmap_num; j++){
-					if(artifacts->count[i] >= 32){
-						unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[start_bitmap_idx + j]);
-						delete[] sel_addr;
-					} else {
+					if(artifacts->count[i] < 16){
 						sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx + j]);
 						delete[] sel_addr;
+					} else {
+						idx_t use_bitmap = artifacts->use_bitmap[i];
+						idx_t bitmap_is_compressed = artifacts->bitmap_is_compressed[start_bitmap_idx + j];
+
+						if(use_bitmap == 0 && bitmap_is_compressed == 1){
+							if(artifacts->count[i] < 30){
+								sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx + j]);
+								delete[] sel_addr;
+							} else {
+								Compressed64ListWithSize* sel_addr = reinterpret_cast<Compressed64ListWithSize*>(artifacts->bitmap[start_bitmap_idx + j]);
+								delete sel_addr;
+							}
+						} else {
+							unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[start_bitmap_idx + j]);
+							delete[] sel_addr;
+						}
 					}
 				}
 			}
@@ -1485,12 +1603,25 @@ public:
 				idx_t bitmap_num = artifacts->start_bitmap_idx[i + 1] - start_bitmap_idx;
 
 				for(size_t j = 0; j < bitmap_num; j++){
-					if(artifacts->count[i] >= 32){
-						unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[start_bitmap_idx + j]);
-						delete[] sel_addr;
-					} else {
+					if(artifacts->count[i] < 16){
 						sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx + j]);
 						delete[] sel_addr;
+					} else {
+						idx_t use_bitmap = artifacts->use_bitmap[i];
+						idx_t bitmap_is_compressed = artifacts->bitmap_is_compressed[start_bitmap_idx + j];
+
+						if(use_bitmap == 0 && bitmap_is_compressed == 1){
+							if(artifacts->count[i] < 30){
+								sel_t* sel_addr = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx + j]);
+								delete[] sel_addr;
+							} else {
+								Compressed64ListWithSize* sel_addr = reinterpret_cast<Compressed64ListWithSize*>(artifacts->bitmap[start_bitmap_idx + j]);
+								delete sel_addr;
+							}
+						} else {
+							unsigned char* sel_addr = reinterpret_cast<unsigned char*>(artifacts->bitmap[start_bitmap_idx + j]);
+							delete[] sel_addr;
+						}
 					}
 				}
 			}

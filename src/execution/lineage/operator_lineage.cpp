@@ -363,6 +363,7 @@ void OperatorLineage::PostProcess() {
 			  idx_t count = log[tkey]->compressed_perfect_probe_ht_log.artifacts->count[lsn];
 			  idx_t in_start = log[tkey]->compressed_perfect_probe_ht_log.artifacts->in_start[lsn];
 			  idx_t use_bitmap = log[tkey]->compressed_perfect_probe_ht_log.artifacts->use_bitmap[lsn];
+			  idx_t bitmap_is_compressed = log[tkey]->compressed_perfect_probe_ht_log.artifacts->bitmap_is_compressed[lsn];
 
 			  sel_t* left = ChangeBitMapToSel(log[tkey]->compressed_perfect_probe_ht_log.artifacts, 0, lsn);
 
@@ -382,7 +383,7 @@ void OperatorLineage::PostProcess() {
 			  }
 			  count_so_far += count;
 
-			  if(use_bitmap){
+			  if(use_bitmap || (use_bitmap == 0 && bitmap_is_compressed && count >= 30)){
 				  delete[] left;
 			  }
 			  if(count >= 30){

@@ -411,7 +411,37 @@ namespace duckdb {
 	    vector<idx_t> bitmap_is_compressed;
 	    vector<idx_t> use_bitmap;
 
-	    if(result_count >= 16) {
+	    if(result_count < 16) {
+		    sel_t* sel_copy = new sel_t[result_count];
+		    std::copy(sel_data, sel_data + result_count, sel_copy);
+
+		    bitmap_vector.push_back(reinterpret_cast<idx_t>(sel_copy));
+		    bitmap_sizes.push_back(result_count * sizeof(sel_t));
+		    bitmap_is_compressed.push_back(0);
+		    use_bitmap.push_back(0);
+
+		    vector<vector<idx_t>> func_result_vector = {bitmap_vector, bitmap_sizes, bitmap_is_compressed, use_bitmap};
+		    return func_result_vector;
+	    }
+
+	    int is_ascend = 1;
+	    for(size_t i = 1; i < result_count; i++){
+		    if(sel_data[i] <= sel_data[i-1]){
+			    is_ascend += 1;
+		    }
+	    }
+
+	    if((result_count / is_ascend) < 16){
+			// bitpack
+			sel_t* sel_bitpack = ChangeSelDataToBitpack(sel_data, result_count);
+
+		    bitmap_vector.push_back(reinterpret_cast<idx_t>(sel_bitpack));
+		    bitmap_sizes.push_back(GetSelBitpackSize(sel_bitpack, result_count));
+		    bitmap_is_compressed.push_back(1);
+		    use_bitmap.push_back(0);
+
+	    } else {
+		    // bitmap
 		    size_t bitmap_size = (STANDARD_VECTOR_SIZE + 7) / 8;
 		    unsigned char* bitmap = new unsigned char[bitmap_size];
 		    std::memset(bitmap, 0, bitmap_size);
@@ -434,7 +464,7 @@ namespace duckdb {
 				    // here we finish the current bitmap
 				    // compress the bitmap
 
-					vector<idx_t> result_vector = CompressBitmap(curr_bitmap_size, bitmap, method);
+				    vector<idx_t> result_vector = CompressBitmap(curr_bitmap_size, bitmap, method);
 				    bitmap_vector.push_back(result_vector[0]);
 				    bitmap_sizes.push_back(result_vector[1]);
 				    bitmap_is_compressed.push_back(result_vector[2]);
@@ -458,15 +488,6 @@ namespace duckdb {
 		    bitmap_is_compressed.push_back(result_vector[2]);
 
 		    use_bitmap.push_back(1);
-
-	    } else {
-		    sel_t* sel_copy = new sel_t[result_count];
-		    std::copy(sel_data, sel_data + result_count, sel_copy);
-
-		    bitmap_vector.push_back(reinterpret_cast<idx_t>(sel_copy));
-		    bitmap_sizes.push_back(result_count * sizeof(sel_t));
-		    bitmap_is_compressed.push_back(0);
-		    use_bitmap.push_back(0);
 	    }
 
 	    vector<vector<idx_t>> func_result_vector = {bitmap_vector, bitmap_sizes, bitmap_is_compressed, use_bitmap};
@@ -482,6 +503,7 @@ namespace duckdb {
 	    idx_t start_bitmap_idx = artifacts->start_bitmap_idx[lsn];
 	    idx_t use_bitmap = artifacts->use_bitmap[lsn];
 	    idx_t bitmap_num = artifacts->start_bitmap_idx[lsn+1] - start_bitmap_idx;
+
 
 	    if (bitmap_num) {
 		    if (use_bitmap){
@@ -504,11 +526,18 @@ namespace duckdb {
 			    return sel_copy;
 		    }
 		    else {
-			    sel_t* bitmap_sel = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx]);
-			    for(size_t i = 0; i < count; i++){
-				    bitmap_sel[i] += offset;
+			    idx_t bitmap_is_compressed = artifacts->bitmap_is_compressed[start_bitmap_idx];
+
+			    if(bitmap_is_compressed){
+				    sel_t* sel_bitpack = ChangeBitpackToSelData(reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx]), count);
+					return sel_bitpack;
+			    }else{
+				    sel_t* bitmap_sel = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx]);
+				    for(size_t i = 0; i < count; i++){
+					    bitmap_sel[i] += offset;
+				    }
+				    return bitmap_sel;
 			    }
-			    return bitmap_sel;
 		    }
 	    }
 
