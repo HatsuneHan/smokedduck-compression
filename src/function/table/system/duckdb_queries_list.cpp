@@ -154,7 +154,7 @@ void DuckDBQueriesListFunction(ClientContext &context, TableFunctionInput &data_
 		idx_t compressed_total_size = lineage_manager->GetCompressedArtifactSize(lop_size, physical_op_num);
 		stats[0] = compressed_total_size;
 	} else {
-		idx_t uncompressed_total_size = lineage_manager->GetUncompressedArtifactSize();
+		idx_t uncompressed_total_size = lineage_manager->GetUncompressedArtifactSize(lop_size, physical_op_num);
 		stats[0] = uncompressed_total_size;
 	}
 

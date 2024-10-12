@@ -147,7 +147,10 @@ for th_id in threads_list:
         all_dfs.append(df_from_dicts)
 
     final_df = pd.concat(all_dfs, ignore_index=True)
-    final_df.to_csv(f'physical_operator_stats_{sf}_{th_id}.csv', index=False)
+    if args.compress_lineage:
+        final_df.to_csv(f'physical_operator_stats_{sf}_{th_id}_compressed.csv', index=False)
+    else:
+        final_df.to_csv(f'physical_operator_stats_{sf}_{th_id}_uncompressed.csv', index=False)
 
 
 print("average", size_avg/22.0)

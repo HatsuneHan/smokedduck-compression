@@ -65,7 +65,7 @@ public:
 		physical_lname_relations.clear();
 	}
 
-	size_t GetUncompressedArtifactSize();
+	size_t GetUncompressedArtifactSize(std::unordered_map<string, size_t>&, int&);
 
 	size_t GetCompressedArtifactSize(std::unordered_map<string, size_t>&, int&);
 
