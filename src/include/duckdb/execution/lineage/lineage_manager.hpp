@@ -62,18 +62,22 @@ public:
 		query_to_id.clear();
 		global_logger.clear();
 		operators_ids.clear();
+		physical_lname_relations.clear();
 	}
 
-	size_t GetUncompressedArtifactSize();
+	size_t GetUncompressedArtifactSize(std::unordered_map<string, size_t>&, int&);
 
-	size_t GetCompressedArtifactSize();
+	size_t GetCompressedArtifactSize(std::unordered_map<string, size_t>&, int&);
 
 public:
   bool capture;
   bool persist;
 	bool compress;
+  int physical_id_cnt;
   std::unordered_map<void*, shared_ptr<OperatorLineage>> global_logger;
   std::unordered_map<void*, int> operators_ids;
+
+  std::unordered_map<int, string> physical_lname_relations;
 
   //! map between lineage relational table name and its in-mem lineage
   std::unordered_map<string, shared_ptr<OperatorLineage>> table_lineage_op;

@@ -31,7 +31,7 @@ class OperatorLineage {
 public:
 	explicit OperatorLineage(int operator_id, PhysicalOperatorType type, string name)
 	    : operator_id(operator_id),  processed(false), type(type), name(name), table_name(""), extra(""),
-      out_start(0), out_end(0) {
+      out_start(0), out_end(0), lineage_input_sizes(0), lineage_output_sizes(0) {
         log_index = make_shared_ptr<LogIndex>();
       }
 
@@ -58,6 +58,10 @@ public:
   idx_t out_start;
   idx_t out_end;
   std::mutex glock;
+
+  size_t lineage_input_sizes;
+  size_t lineage_output_sizes;
+
 };
 
 } // namespace duckdb

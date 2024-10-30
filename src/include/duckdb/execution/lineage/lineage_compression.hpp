@@ -313,7 +313,8 @@ public:
 		// size of the all the elements, not calculating the size of the extra buffers held by the elements
 
 		if(size == 0){
-			return sizeof(CompressedScanArtifactList);
+//			return sizeof(CompressedScanArtifactList);
+			return 0;
 		} else {
 			return this->artifacts->bitmap.GetBytesSize()
 			       + this->artifacts->bitmap_size.GetBytesSize()
@@ -322,8 +323,8 @@ public:
 			       + this->artifacts->count.GetBytesSize()
 			       + this->artifacts->start.GetBytesSize()
 			       + this->artifacts->vector_index.GetBytesSize()
-			       + this->artifacts->use_bitmap.GetBytesSize()
-			       + sizeof(CompressedScanArtifactList);
+			       + this->artifacts->use_bitmap.GetBytesSize();
+//			       + sizeof(CompressedScanArtifactList);
 		}
 	}
 
@@ -450,7 +451,8 @@ public:
 
 	idx_t GetBytesSize() {
 		if(size == 0){
-			return sizeof(CompressedFilterArtifactList);
+//			return sizeof(CompressedFilterArtifactList);
+			return 0;
 		} else {
 			return this->artifacts->bitmap.GetBytesSize()
 			       + this->artifacts->bitmap_size.GetBytesSize()
@@ -458,8 +460,8 @@ public:
 			       + this->artifacts->start_bitmap_idx.GetBytesSize()
 			       + this->artifacts->count.GetBytesSize()
 			       + this->artifacts->in_start.GetBytesSize()
-			       + this->artifacts->use_bitmap.GetBytesSize()
-			       + sizeof(CompressedFilterArtifactList);
+			       + this->artifacts->use_bitmap.GetBytesSize();
+//			       + sizeof(CompressedFilterArtifactList);
 		}
 	}
 
@@ -534,12 +536,13 @@ public:
 
 	idx_t GetBytesSize() {
 		if(size == 0){
-			return sizeof(CompressedAddressArtifactList);
+//			return sizeof(CompressedAddressArtifactList);
+			return 0;
 		} else {
 			return this->artifacts->addresses.GetBytesSize()
 			       + this->artifacts->is_ascend.GetBytesSize()
-			       + this->artifacts->count.GetBytesSize()
-			       + sizeof(CompressedAddressArtifactList);
+			       + this->artifacts->count.GetBytesSize();
+//			       + sizeof(CompressedAddressArtifactList);
 		}
 	}
 
@@ -610,11 +613,12 @@ public:
 
 	idx_t GetBytesSize() {
 		if(size == 0){
-			return sizeof(CompressedFinalizeAddressArtifactList);
+			return 0;
+//			return sizeof(CompressedFinalizeAddressArtifactList);
 		} else {
 			return this->artifacts->addresses.GetBytesSize()
-			       + this->artifacts->count.GetBytesSize()
-			       + sizeof(CompressedFinalizeAddressArtifactList);
+			       + this->artifacts->count.GetBytesSize();
+//			       + sizeof(CompressedFinalizeAddressArtifactList);
 		}
 	}
 
@@ -705,12 +709,13 @@ public:
 
 	idx_t GetBytesSize() {
 		if(size == 0){
-			return sizeof(CompressedCombineArtifactList);
+//			return sizeof(CompressedCombineArtifactList);
+			return 0;
 		} else {
 			return this->artifacts->src.GetBytesSize()
 			       + this->artifacts->target.GetBytesSize()
-			       + this->artifacts->count.GetBytesSize()
-			       + sizeof(CompressedCombineArtifactList);
+			       + this->artifacts->count.GetBytesSize();
+//			       + sizeof(CompressedCombineArtifactList);
 		}
 	}
 
@@ -835,14 +840,15 @@ public:
 
 	idx_t GetBytesSize() {
 		if(size == 0){
-			return sizeof(CompressedAddressSelArtifactList);
+//			return sizeof(CompressedAddressSelArtifactList);
+			return 0;
 		} else {
 			return this->artifacts->addresses.GetBytesSize()
 			       + this->artifacts->is_ascend.GetBytesSize()
 			       + this->artifacts->sel.GetBytesSize()
 			       + this->artifacts->count.GetBytesSize()
-			       + this->artifacts->in_start.GetBytesSize()
-			       + sizeof(CompressedAddressSelArtifactList);
+			       + this->artifacts->in_start.GetBytesSize();
+//			       + sizeof(CompressedAddressSelArtifactList);
 		}
 	}
 
@@ -1040,7 +1046,8 @@ public:
 
 	idx_t GetBytesSize() {
 		if(size == 0){
-			return sizeof(CompressedJoinGatherArtifactList);
+//			return sizeof(CompressedJoinGatherArtifactList);
+			return 0;
 		} else {
 			return this->artifacts->rhs.GetBytesSize()
 			       + this->artifacts->use_rle.GetBytesSize()
@@ -1050,8 +1057,8 @@ public:
 			       + this->artifacts->start_bitmap_idx.GetBytesSize()
 			       + this->artifacts->count.GetBytesSize()
 			       + this->artifacts->in_start.GetBytesSize()
-			       + this->artifacts->use_bitmap.GetBytesSize()
-			       + sizeof(CompressedJoinGatherArtifactList);
+			       + this->artifacts->use_bitmap.GetBytesSize();
+//			       + sizeof(CompressedJoinGatherArtifactList);
 		}
 	}
 
@@ -1206,7 +1213,8 @@ public:
 
 	idx_t GetBytesSize() {
 		if(size == 0){
-			return sizeof(CompressedPerfectJoinArtifactList);
+//			return sizeof(CompressedPerfectJoinArtifactList);
+			return 0;
 		} else {
 			return this->artifacts->bitmap.GetBytesSize()
 			       + this->artifacts->bitmap_size.GetBytesSize()
@@ -1215,8 +1223,8 @@ public:
 			       + this->artifacts->right.GetBytesSize()
 			       + this->artifacts->count.GetBytesSize()
 			       + this->artifacts->in_start.GetBytesSize()
-			       + this->artifacts->use_bitmap.GetBytesSize()
-			       + sizeof(CompressedPerfectJoinArtifactList);
+			       + this->artifacts->use_bitmap.GetBytesSize();
+//			       + sizeof(CompressedPerfectJoinArtifactList);
 		}
 	}
 
@@ -1333,7 +1341,8 @@ public:
 	idx_t GetBytesSize() {
 		// do not consider vector buffer size, it is only used for statistics
 		if(size == 0){
-			return sizeof(CompressedPerfectFullScanHTArtifactList);
+//			return sizeof(CompressedPerfectFullScanHTArtifactList);
+			return 0;
 		} else {
 			return this->artifacts->sel_build.GetBytesSize()
 			       + this->artifacts->sel_tuples.GetBytesSize()
@@ -1344,9 +1353,9 @@ public:
 
 			       + this->artifacts->key_count.GetBytesSize()
 			       + this->artifacts->ht_count.GetBytesSize()
-			       + this->artifacts->vector_buffer_size.GetBytesSize()
+			       + this->artifacts->vector_buffer_size.GetBytesSize();
 
-			       + sizeof(CompressedPerfectFullScanHTArtifactList);
+//			       + sizeof(CompressedPerfectFullScanHTArtifactList);
 		}
 	}
 
@@ -1394,12 +1403,13 @@ public:
 
 	idx_t GetBytesSize() {
 		if(size == 0){
-			return sizeof(CompressedLimitArtifactList);
+//			return sizeof(CompressedLimitArtifactList);
+			return 0;
 		} else {
 			return this->artifacts->start.GetBytesSize()
 			       + this->artifacts->end.GetBytesSize()
-			       + this->artifacts->in_start.GetBytesSize()
-			       + sizeof(CompressedLimitArtifactList);
+			       + this->artifacts->in_start.GetBytesSize();
+//			       + sizeof(CompressedLimitArtifactList);
 		}
 	}
 
@@ -1453,10 +1463,11 @@ public:
 
 	idx_t GetBytesSize() {
 		if(size == 0){
-			return sizeof(CompressedReorderLogArtifactList);
+//			return sizeof(CompressedReorderLogArtifactList);
+			return 0;
 		} else {
-			return this->artifacts->index.GetBytesSize()
-			       + sizeof(CompressedReorderLogArtifactList);
+			return this->artifacts->index.GetBytesSize();
+//			       + sizeof(CompressedReorderLogArtifactList);
 		}
 	}
 
@@ -1509,14 +1520,15 @@ public:
 
 	idx_t GetBytesSize() {
 		if(size == 0){
-			return sizeof(CompressedCrossArtifactList);
+			return 0;
+//			return sizeof(CompressedCrossArtifactList);
 		} else {
 			return this->artifacts->branch_scan_lhs.GetBytesSize()
 			       + this->artifacts->position_in_chunk.GetBytesSize()
 			       + this->artifacts->scan_position.GetBytesSize()
 			       + this->artifacts->count.GetBytesSize()
-			       + this->artifacts->in_start.GetBytesSize()
-			       + sizeof(CompressedCrossArtifactList);
+			       + this->artifacts->in_start.GetBytesSize();
+//			       + sizeof(CompressedCrossArtifactList);
 		}
 	}
 
@@ -1675,7 +1687,8 @@ public:
 
 	idx_t GetBytesSize() {
 		if(size == 0){
-			return sizeof(CompressedNLJArtifactList);
+//			return sizeof(CompressedNLJArtifactList);
+			return 0;
 		} else {
 			return this->artifacts->bitmap.GetBytesSize()
 			       + this->artifacts->bitmap_size.GetBytesSize()
@@ -1685,8 +1698,8 @@ public:
 			       + this->artifacts->count.GetBytesSize()
 			       + this->artifacts->current_row_index.GetBytesSize()
 			       + this->artifacts->out_start.GetBytesSize()
-			       + this->artifacts->use_bitmap.GetBytesSize()
-			       + sizeof(CompressedNLJArtifactList);
+			       + this->artifacts->use_bitmap.GetBytesSize();
+//			       + sizeof(CompressedNLJArtifactList);
 		}
 	}
 

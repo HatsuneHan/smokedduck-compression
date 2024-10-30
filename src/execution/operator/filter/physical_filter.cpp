@@ -80,6 +80,7 @@ OperatorResultType PhysicalFilter::ExecuteInternal(ExecutionContext &context, Da
 				vector<idx_t> &bitmap_is_compressed = result_vector[2];
 				vector<idx_t> &use_bitmap = result_vector[3];
 
+
 				active_log->compressed_filter_log.PushBack(bitmap_vector, bitmap_sizes, bitmap_is_compressed,
 				                                           bitmap_vector.size(), result_count,
 				                                           active_lop->children[0]->out_start, use_bitmap[0]);

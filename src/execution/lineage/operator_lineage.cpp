@@ -459,9 +459,9 @@ void OperatorLineage::PostProcess() {
 				  delete[] payload;
 			  }
 		  }
-		  // std::cout << "start Clear\n";
-		  log[tkey]->compressed_join_gather_log.Clear();
-		  // std::cout << "end Clear\n";
+//		  std::cout << "start Clear\n";
+//		  log[tkey]->compressed_join_gather_log.Clear();
+//		  std::cout << "end Clear\n";
 
 	  } else {
 		  if (log.count(tkey) == 0 || log[tkey]->join_gather_log.empty()){
@@ -631,6 +631,7 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
   // std::cout << "get lineage as chunk : " << data_idx << " " << global_count << std::endl;
 
   Vector thread_id_vec(Value::INTEGER(thread_id));
+
 	switch (type) {
 	// schema: [INTEGER in_index, INTEGER out_index, INTEGER partition_index]
 	case PhysicalOperatorType::FILTER: {

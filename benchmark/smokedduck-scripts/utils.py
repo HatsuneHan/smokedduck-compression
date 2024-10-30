@@ -64,6 +64,74 @@ def gettimings(plan, res={}):
         gettimings(c, res)
     return res
 
+def getchildcardinality(op):
+    tmp_op = op
+    while tmp_op['name'] == 'RIGHT_DELIM_JOIN' or tmp_op['name'] == 'LEFT_DELIM_JOIN':
+        if tmp_op['name'] == 'RIGHT_DELIM_JOIN':
+            tmp_op = tmp_op['children'][1]
+        elif tmp_op['name'] == 'LEFT_DELIM_JOIN':
+            tmp_op = tmp_op['children'][0]
+        else:
+            print("No match operation")
+            sys.exit(1)
+
+    return tmp_op['cardinality']
+
+def getcardinality(plan, res_input_left={}, res_input_right={} ,res_output={}):
+    for c in plan['children']:
+        op_name = c['name']
+
+        if c['name'] == 'RIGHT_DELIM_JOIN':
+            cardinality = getchildcardinality(c['children'][1])
+        elif c['name'] == 'LEFT_DELIM_JOIN':
+            cardinality = getchildcardinality(c['children'][0])
+        else:
+            cardinality = c['cardinality']
+
+        physical_op_name = op_name + str(len(res_output))
+
+        # no child, the logical operator is a leaf, input(left) = output
+        if len(c['children']) == 0:
+            res_input_left[physical_op_name] = cardinality
+            res_input_right[physical_op_name] = 0
+        
+        # one child, child's output = parent's input
+        elif len(c['children']) == 1:
+            child_op = c['children']
+            child_op_cardinality = getchildcardinality(child_op[0])
+
+            res_input_left[physical_op_name] = child_op_cardinality
+            res_input_right[physical_op_name] = 0
+        
+        # two children, left child's output = parent's input_left, right child's output = parent's input_right
+        # appear in join operators
+        elif len(c['children']) == 2 :
+            child_op = c['children']
+            left_child_op_cardinality = getchildcardinality(child_op[0])
+            right_child_op_cardinality = getchildcardinality(child_op[1])
+
+            res_input_left[physical_op_name] = left_child_op_cardinality
+            res_input_right[physical_op_name] = right_child_op_cardinality
+
+        # three children, appear in DELIM_JOIN, the third operator is used for distinct
+        elif len(c['children']) == 3:
+            # actually same for 2 children, we do not need to consider the third child for input size
+            child_op = c['children']
+            left_child_op_cardinality = getchildcardinality(child_op[0])
+            right_child_op_cardinality = getchildcardinality(child_op[1])
+
+            res_input_left[physical_op_name] = left_child_op_cardinality
+            res_input_right[physical_op_name] = right_child_op_cardinality
+
+        else:
+            print("Error: More than 3 children")
+            sys.exit(1)
+
+        res_output[physical_op_name] = cardinality
+        getcardinality(c, res_input_left, res_input_right, res_output)
+
+    return res_input_left, res_input_right, res_output
+
 def parse_plan_timings(qid):
     plan_fname = '{}_plan.json'.format(qid)
     plan_timings = {}
@@ -72,8 +140,25 @@ def parse_plan_timings(qid):
         print(plan)
         plan_timings = gettimings(plan, {})
         print('X', plan_timings)
-    os.remove(plan_fname)
+    # os.remove(plan_fname)
     return plan_timings
+
+def parse_plan_cardinality(qid):
+    plan_fname = '{}_plan.json'.format(qid)
+    plan_input_left = {}
+    plan_input_right = {}
+    plan_output = {}
+
+    with open(plan_fname, 'r') as f:
+        plan = json.load(f)
+        plan_input_left, plan_input_right, plan_output = getcardinality(plan, {}, {}, {})
+        
+        # print("Physical operator output, input_left, input_right: ")
+        # for key in plan_output.keys():
+        #     print(key, plan_output[key], plan_input_left[key], plan_input_right[key])
+
+    return plan_input_left, plan_input_right, plan_output
+
 
 def getStats(con, q):
     print(q)
@@ -90,7 +175,11 @@ def getStats(con, q):
     postprocess_time = query_info.loc[n, 'postprocess_time']
     plan = query_info.loc[n, 'plan']
 
-    return lineage_size, lineage_count, nchunks, postprocess_time, plan
+    print("physical op size is:")
+    
+    physical_op_size = query_info.loc[n, 'physical_op_size']
+
+    return lineage_size, lineage_count, nchunks, postprocess_time, plan, physical_op_size
 
 def execute(Q, con, args):
     Q = " ".join(Q.split())

@@ -17,6 +17,7 @@ thread_local shared_ptr<OperatorLineage> active_lop;
 shared_ptr<OperatorLineage> LineageManager::CreateOperatorLineage(ClientContext &context, PhysicalOperator *op) {
 	global_logger[(void*)op] = make_shared_ptr<OperatorLineage>(operators_ids[(void*)op], op->type, op->GetName());
 	op->lop = global_logger[(void*)op];
+
 	InitLog(op->lop, (void*)&context);
 
 	if (op->type == PhysicalOperatorType::RESULT_COLLECTOR) {
@@ -25,7 +26,7 @@ shared_ptr<OperatorLineage> LineageManager::CreateOperatorLineage(ClientContext 
 		global_logger[(void*)op]->children.push_back(lop);
 	}
 
-  if (op->type == PhysicalOperatorType::RIGHT_DELIM_JOIN || op->type == PhysicalOperatorType::LEFT_DELIM_JOIN) {
+	if (op->type == PhysicalOperatorType::RIGHT_DELIM_JOIN || op->type == PhysicalOperatorType::LEFT_DELIM_JOIN) {
 		auto distinct = (PhysicalOperator*)dynamic_cast<PhysicalDelimJoin *>(op)->distinct.get();
 		shared_ptr<OperatorLineage> lop = CreateOperatorLineage(context, distinct);
 		global_logger[(void*)op]->children.push_back(lop);
@@ -46,35 +47,57 @@ shared_ptr<OperatorLineage> LineageManager::CreateOperatorLineage(ClientContext 
 
 // Iterate through in Postorder to ensure that children have PipelineLineageNodes set before parents
 int LineageManager::PlanAnnotator(PhysicalOperator *op, int counter) {
-	
+//	physical_ids[(void*)op] = physical_id_cnt++;
+	string physical_op_name = op->GetName() + std::to_string(physical_id_cnt);
+//	std::cout << "Operator " << physical_op_name << std::endl;
 
-  if (op->type == PhysicalOperatorType::RESULT_COLLECTOR) {
+	physical_id_cnt++;
+
+	if (op->type == PhysicalOperatorType::RESULT_COLLECTOR) {
 		PhysicalOperator* plan = &dynamic_cast<PhysicalResultCollector*>(op)->plan;
-    if (persist) std::cout << plan->ToString() << std::endl;
+		if (persist) std::cout << plan->ToString() << std::endl;
 		counter = PlanAnnotator(plan, counter);
 	}
 
-  if (op->type == PhysicalOperatorType::RIGHT_DELIM_JOIN || op->type == PhysicalOperatorType::LEFT_DELIM_JOIN) {
+	if (op->type == PhysicalOperatorType::RIGHT_DELIM_JOIN) {
+		for (idx_t i = 0; i < op->children.size(); i++) {
+			counter = PlanAnnotator(op->children[i].get(), counter);
+		}
 		counter = PlanAnnotator( dynamic_cast<PhysicalDelimJoin *>(op)->join.get(), counter);
 		counter = PlanAnnotator((PhysicalOperator*) dynamic_cast<PhysicalDelimJoin *>(op)->distinct.get(), counter);
 	}
 
-	for (idx_t i = 0; i < op->children.size(); i++) {
-		counter = PlanAnnotator(op->children[i].get(), counter);
+	if (op->type == PhysicalOperatorType::LEFT_DELIM_JOIN) {
+		counter = PlanAnnotator( dynamic_cast<PhysicalDelimJoin *>(op)->join.get(), counter);
+		for (idx_t i = 0; i < op->children.size(); i++) {
+			counter = PlanAnnotator(op->children[i].get(), counter);
+		}
+		counter = PlanAnnotator((PhysicalOperator*) dynamic_cast<PhysicalDelimJoin *>(op)->distinct.get(), counter);
+	}
+
+	if (op->type != PhysicalOperatorType::RIGHT_DELIM_JOIN && op->type != PhysicalOperatorType::LEFT_DELIM_JOIN) {
+		for (idx_t i = 0; i < op->children.size(); i++) {
+			counter = PlanAnnotator(op->children[i].get(), counter);
+		}
 	}
 
 	operators_ids[(void*)op] = counter;
+	if(op->GetName() != "PRAGMA"){
+		physical_lname_relations[counter] = physical_op_name;
+	}
+
 	return counter + 1;
 }
 
 void LineageManager::InitOperatorPlan(ClientContext &context, PhysicalOperator *op) {
 	if (!capture) return;
+	physical_id_cnt = 0;
 	PlanAnnotator(op, 0);
 	CreateOperatorLineage(context, op);
 }
 
 void LineageManager::CreateLineageTables(ClientContext &context, PhysicalOperator *op, idx_t query_id) {
-  if (op->type == PhysicalOperatorType::RIGHT_DELIM_JOIN || op->type == PhysicalOperatorType::LEFT_DELIM_JOIN) {
+	if (op->type == PhysicalOperatorType::RIGHT_DELIM_JOIN || op->type == PhysicalOperatorType::LEFT_DELIM_JOIN) {
 		CreateLineageTables( context, dynamic_cast<PhysicalDelimJoin *>(op)->join.get(), query_id);
 		CreateLineageTables(context, (PhysicalOperator*) dynamic_cast<PhysicalDelimJoin *>(op)->distinct.get(), query_id);
 	}
@@ -84,9 +107,9 @@ void LineageManager::CreateLineageTables(ClientContext &context, PhysicalOperato
 
 	OperatorLineage *lop = lineage_manager->global_logger[(void *)op].get();
 	if (lop == nullptr) return;
-  lop->extra = op->ParamsToString();
+	lop->extra = op->ParamsToString();
 
-  if (op->type == PhysicalOperatorType::TABLE_SCAN) {
+	if (op->type == PhysicalOperatorType::TABLE_SCAN) {
 		string table_str = dynamic_cast<PhysicalTableScan *>(op)->ParamsToString();
 		lop->table_name = table_str.substr(0, table_str.find('\n'));
 	}
@@ -101,17 +124,17 @@ void LineageManager::CreateLineageTables(ClientContext &context, PhysicalOperato
 	string catalog_name = TEMP_CATALOG;
 	auto binder = Binder::CreateBinder(context);
 	auto &catalog = Catalog::GetCatalog(context, catalog_name);
-  // Example: LINEAGE_1_HASH_JOIN_3
-  string table_name = prefix;
-  // Create Table
-  auto create_info = make_uniq<CreateTableInfo>(catalog_name, DEFAULT_SCHEMA, table_name);
-  create_info->temporary = true;
-  create_info->on_conflict = OnCreateConflict::IGNORE_ON_CONFLICT;
-  for (idx_t col_i = 0; col_i < table_column_types.size(); col_i++) {
-    create_info->columns.AddColumn(move(table_column_types[col_i]));
-  }
-  table_lineage_op[table_name] = lineage_manager->global_logger[(void *)op];
-  catalog.CreateTable(context, move(create_info));
+	// Example: LINEAGE_1_HASH_JOIN_3
+	string table_name = prefix;
+	// Create Table
+	auto create_info = make_uniq<CreateTableInfo>(catalog_name, DEFAULT_SCHEMA, table_name);
+	create_info->temporary = true;
+	create_info->on_conflict = OnCreateConflict::IGNORE_ON_CONFLICT;
+	for (idx_t col_i = 0; col_i < table_column_types.size(); col_i++) {
+		create_info->columns.AddColumn(move(table_column_types[col_i]));
+	}
+	table_lineage_op[table_name] = lineage_manager->global_logger[(void *)op];
+	catalog.CreateTable(context, move(create_info));
 }
 
 void LineageManager::StoreQueryLineage(ClientContext &context, PhysicalOperator *op, string query) {
@@ -121,10 +144,11 @@ void LineageManager::StoreQueryLineage(ClientContext &context, PhysicalOperator 
 	idx_t query_id = query_to_id.size();
 	query_to_id.push_back(query);
 	queryid_to_plan[query_id] = lineage_manager->global_logger[(void *)op];
-  if (persist) CreateLineageTables(context, op, query_id);
+	if (persist) CreateLineageTables(context, op, query_id);
 }
 
-size_t LineageManager::GetUncompressedArtifactSize() {
+size_t LineageManager::GetUncompressedArtifactSize(std::unordered_map<string, size_t>& lop_size,
+                                                   int& physical_op_num) {
 	size_t total_size = 0;
 	size_t total_buffer_size = 0;
 
@@ -170,8 +194,17 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 	size_t nlj_log_size = 0;
 	size_t nlj_log_buffer_size = 0;
 
+	physical_op_num = physical_lname_relations.size();
+
 	for (const auto& pair : lineage_manager->global_logger){
+
 		OperatorLineage* lop = pair.second.get();
+		int lop_id = lop->operator_id;
+		string physical_op_name = physical_lname_relations[lop_id];
+
+		size_t op_lineage_size = 0;
+		size_t op_lineage_buffer_size = 0;
+
 		for (const auto& pair_log : lop->log){
 			Log* curr_log = pair_log.second.get();
 
@@ -181,7 +214,7 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 				size_t tmp_filter_log_buffer_size = 0;
 				size_t tmp_filter_log_element_size = 0;
 
-				tmp_filter_log_element_size += sizeof(std::vector<filter_artifact>); // vector size
+//				tmp_filter_log_element_size += sizeof(std::vector<filter_artifact>); // vector size
 				tmp_filter_log_element_size += sizeof(filter_artifact) * curr_log->filter_log.capacity(); // size of elements in vector
 
 				for(size_t i = 0; i < curr_log->filter_log.size(); i++){
@@ -197,6 +230,9 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 
 				total_size += tmp_filter_log_size;
 				total_buffer_size += tmp_filter_log_buffer_size;
+
+				op_lineage_size += tmp_filter_log_size;
+				op_lineage_buffer_size += tmp_filter_log_buffer_size;
 			}
 
 			// limit offset log
@@ -205,7 +241,7 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 				size_t tmp_limit_offset_buffer_size = 0;
 				size_t tmp_limit_offset_element_size = 0;
 
-				tmp_limit_offset_element_size += sizeof(std::vector<limit_artifact>);
+//				tmp_limit_offset_element_size += sizeof(std::vector<limit_artifact>);
 				tmp_limit_offset_element_size += sizeof(limit_artifact) * curr_log->limit_offset.capacity();
 
 				tmp_limit_offset_buffer_size = 0;
@@ -216,6 +252,10 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 				limit_offset_buffer_size += tmp_limit_offset_buffer_size;
 
 				total_size += tmp_limit_offset_size;
+				total_buffer_size += tmp_limit_offset_buffer_size;
+
+				op_lineage_size += tmp_limit_offset_size;
+				op_lineage_buffer_size += tmp_limit_offset_buffer_size;
 			}
 
 			// perfect full scan ht log
@@ -224,7 +264,7 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 				size_t tmp_perfect_full_scan_ht_log_buffer_size = 0;
 				size_t tmp_perfect_full_scan_ht_log_element_size = 0;
 
-				tmp_perfect_full_scan_ht_log_element_size += sizeof(std::vector<perfect_full_scan_ht_artifact>);
+//				tmp_perfect_full_scan_ht_log_element_size += sizeof(std::vector<perfect_full_scan_ht_artifact>);
 				tmp_perfect_full_scan_ht_log_element_size += sizeof(perfect_full_scan_ht_artifact) * curr_log->perfect_full_scan_ht_log.capacity();
 
 				for(size_t i = 0; i < curr_log->perfect_full_scan_ht_log.size(); i++){
@@ -261,6 +301,9 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 
 				total_size += tmp_perfect_full_scan_ht_log_size;
 				total_buffer_size += tmp_perfect_full_scan_ht_log_buffer_size;
+
+				op_lineage_size += tmp_perfect_full_scan_ht_log_size;
+				op_lineage_buffer_size += tmp_perfect_full_scan_ht_log_buffer_size;
 			}
 
 			// perfect probe ht log
@@ -269,7 +312,7 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 				size_t tmp_perfect_probe_ht_log_buffer_size = 0;
 				size_t tmp_perfect_probe_ht_log_element_size = 0;
 
-				tmp_perfect_probe_ht_log_element_size += sizeof(std::vector<perfect_join_artifact>);
+//				tmp_perfect_probe_ht_log_element_size += sizeof(std::vector<perfect_join_artifact>);
 				tmp_perfect_probe_ht_log_element_size += sizeof(perfect_join_artifact) * curr_log->perfect_probe_ht_log.capacity();
 
 				size_t tmp_left = 0;
@@ -292,6 +335,9 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 
 				total_size += tmp_perfect_probe_ht_log_size;
 				total_buffer_size += tmp_perfect_probe_ht_log_buffer_size;
+
+				op_lineage_size += tmp_perfect_probe_ht_log_size;
+				op_lineage_buffer_size += tmp_perfect_probe_ht_log_buffer_size;
 			}
 
 			// row group log
@@ -300,7 +346,7 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 				size_t tmp_row_group_log_buffer_size = 0;
 				size_t tmp_row_group_log_element_size = 0;
 
-				tmp_row_group_log_element_size += sizeof(std::vector<scan_artifact>);
+//				tmp_row_group_log_element_size += sizeof(std::vector<scan_artifact>);
 				tmp_row_group_log_element_size += sizeof(scan_artifact) * curr_log->row_group_log.capacity();
 
 				for(size_t i = 0; i < curr_log->row_group_log.size(); i++){
@@ -316,6 +362,9 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 
 				total_size += tmp_row_group_log_size;
 				total_buffer_size += tmp_row_group_log_buffer_size;
+
+				op_lineage_size += tmp_row_group_log_size;
+				op_lineage_buffer_size += tmp_row_group_log_buffer_size;
 			}
 
 			// scatter log
@@ -324,7 +373,7 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 				size_t tmp_scatter_log_buffer_size = 0;
 				size_t tmp_scatter_log_element_size = 0;
 
-				tmp_scatter_log_element_size += sizeof(std::vector<address_artifact>);
+//				tmp_scatter_log_element_size += sizeof(std::vector<address_artifact>);
 				tmp_scatter_log_element_size += sizeof(address_artifact) * curr_log->scatter_log.capacity();
 
 				for(size_t i = 0; i < curr_log->scatter_log.size(); i++){
@@ -340,6 +389,9 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 
 				total_size += tmp_scatter_log_size;
 				total_buffer_size += tmp_scatter_log_buffer_size;
+
+				op_lineage_size += tmp_scatter_log_size;
+				op_lineage_buffer_size += tmp_scatter_log_buffer_size;
 			}
 
 			// scatter sel log
@@ -348,7 +400,7 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 				size_t tmp_scatter_sel_log_buffer_size = 0;
 				size_t tmp_scatter_sel_log_element_size = 0;
 
-				tmp_scatter_sel_log_element_size += sizeof(std::vector<address_sel_artifact>);
+//				tmp_scatter_sel_log_element_size += sizeof(std::vector<address_sel_artifact>);
 				tmp_scatter_sel_log_element_size += sizeof(address_sel_artifact) * curr_log->scatter_sel_log.capacity();
 
 				for(size_t i = 0; i < curr_log->scatter_sel_log.size(); i++){
@@ -367,6 +419,9 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 
 				total_size += tmp_scatter_sel_log_size;
 				total_buffer_size += tmp_scatter_sel_log_buffer_size;
+
+				op_lineage_size += tmp_scatter_sel_log_size;
+				op_lineage_buffer_size += tmp_scatter_sel_log_buffer_size;
 			}
 
 			// gather log
@@ -375,7 +430,7 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 				size_t tmp_gather_log_buffer_size = 0;
 				size_t tmp_gather_log_element_size = 0;
 
-				tmp_gather_log_element_size += sizeof(std::vector<address_artifact>);
+//				tmp_gather_log_element_size += sizeof(std::vector<address_artifact>);
 				tmp_gather_log_element_size += sizeof(address_artifact) * curr_log->gather_log.capacity();
 
 				for(size_t i = 0; i < curr_log->gather_log.size(); i++){
@@ -391,6 +446,9 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 
 				total_size += tmp_gather_log_size;
 				total_buffer_size += tmp_gather_log_buffer_size;
+
+				op_lineage_size += tmp_gather_log_size;
+				op_lineage_buffer_size += tmp_gather_log_buffer_size;
 			}
 
 			// combine log
@@ -399,7 +457,7 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 				size_t tmp_combine_log_buffer_size = 0;
 				size_t tmp_combine_log_element_size = 0;
 
-				tmp_combine_log_element_size += sizeof(std::vector<combine_artifact>);
+//				tmp_combine_log_element_size += sizeof(std::vector<combine_artifact>);
 				tmp_combine_log_element_size += sizeof(combine_artifact) * curr_log->combine_log.capacity();
 
 				for(size_t i = 0; i < curr_log->combine_log.size(); i++){
@@ -418,6 +476,9 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 
 				total_size += tmp_combine_log_size;
 				total_buffer_size += tmp_combine_log_buffer_size;
+
+				op_lineage_size += tmp_combine_log_size;
+				op_lineage_buffer_size += tmp_combine_log_buffer_size;
 			}
 
 			// finalize states log
@@ -426,7 +487,7 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 				size_t tmp_finalize_states_log_buffer_size = 0;
 				size_t tmp_finalize_states_log_element_size = 0;
 
-				tmp_finalize_states_log_element_size += sizeof(std::vector<address_artifact>);
+//				tmp_finalize_states_log_element_size += sizeof(std::vector<address_artifact>);
 				tmp_finalize_states_log_element_size += sizeof(address_artifact) * curr_log->finalize_states_log.capacity();
 
 				for(size_t i = 0; i < curr_log->finalize_states_log.size(); i++){
@@ -442,6 +503,9 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 
 				total_size += tmp_finalize_states_log_size;
 				total_buffer_size += tmp_finalize_states_log_buffer_size;
+
+				op_lineage_size += tmp_finalize_states_log_size;
+				op_lineage_buffer_size += tmp_finalize_states_log_buffer_size;
 			}
 
 			// join gather log
@@ -450,7 +514,7 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 				size_t tmp_join_gather_log_buffer_size = 0;
 				size_t tmp_join_gather_log_element_size = 0;
 
-				tmp_join_gather_log_element_size += sizeof(std::vector<join_gather_artifact>);
+//				tmp_join_gather_log_element_size += sizeof(std::vector<join_gather_artifact>);
 				tmp_join_gather_log_element_size += sizeof(join_gather_artifact) * curr_log->join_gather_log.capacity();
 
 				for(size_t i = 0; i < curr_log->join_gather_log.size(); i++){
@@ -469,6 +533,9 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 
 				total_size += tmp_join_gather_log_size;
 				total_buffer_size += tmp_join_gather_log_buffer_size;
+
+				op_lineage_size += tmp_join_gather_log_size;
+				op_lineage_buffer_size += tmp_join_gather_log_buffer_size;
 			}
 
 			// reorder log
@@ -477,7 +544,7 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 				size_t tmp_reorder_log_buffer_size = 0;
 				size_t tmp_reorder_log_element_size = 0;
 
-				tmp_reorder_log_element_size += sizeof(std::vector<std::vector<idx_t>>);
+//				tmp_reorder_log_element_size += sizeof(std::vector<std::vector<idx_t>>);
 				tmp_reorder_log_element_size += sizeof(std::vector<idx_t>) * curr_log->reorder_log.capacity();
 
 				for(size_t i = 0; i < curr_log->reorder_log.size(); i++){
@@ -493,6 +560,9 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 
 				total_size += tmp_reorder_log_size;
 				total_buffer_size += tmp_reorder_log_buffer_size;
+
+				op_lineage_size += tmp_reorder_log_size;
+				op_lineage_buffer_size += tmp_reorder_log_buffer_size;
 			}
 
 			// cross log
@@ -501,7 +571,7 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 				size_t tmp_cross_log_buffer_size = 0;
 				size_t tmp_cross_log_element_size = 0;
 
-				tmp_cross_log_element_size += sizeof(std::vector<cross_artifact>);
+//				tmp_cross_log_element_size += sizeof(std::vector<cross_artifact>);
 				tmp_cross_log_element_size += sizeof(cross_artifact) * curr_log->cross_log.capacity();
 
 				tmp_cross_log_buffer_size = 0;
@@ -513,6 +583,9 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 
 				total_size += tmp_cross_log_size;
 				total_buffer_size += tmp_cross_log_buffer_size;
+
+				op_lineage_size += tmp_cross_log_size;
+				op_lineage_buffer_size += tmp_cross_log_buffer_size;
 			}
 
 			// nlj log
@@ -521,7 +594,7 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 				size_t tmp_nlj_log_buffer_size = 0;
 				size_t tmp_nlj_log_element_size = 0;
 
-				tmp_nlj_log_element_size += sizeof(std::vector<nlj_artifact>);
+//				tmp_nlj_log_element_size += sizeof(std::vector<nlj_artifact>);
 				tmp_nlj_log_element_size += sizeof(nlj_artifact) * curr_log->nlj_log.capacity();
 
 				for(size_t i = 0; i < curr_log->nlj_log.size(); i++){
@@ -546,63 +619,72 @@ size_t LineageManager::GetUncompressedArtifactSize() {
 
 				total_size += tmp_nlj_log_size;
 				total_buffer_size += tmp_nlj_log_buffer_size;
+
+				op_lineage_size += tmp_nlj_log_size;
+				op_lineage_buffer_size += tmp_nlj_log_buffer_size;
 			}
-
-
 		}
+
+		if(lop_size.find(physical_lname_relations[lop->operator_id]) == lop_size.end()){
+			lop_size[physical_lname_relations[lop->operator_id]] = op_lineage_size;
+		} else {
+			lop_size[physical_lname_relations[lop->operator_id]] += op_lineage_size;
+		}
+
 	}
 
-	std::cout << "\nuncompressed filter_log_size: " << filter_log_size << std::endl;
-	std::cout << "uncompressed filter_log_buffer_size: " << filter_log_buffer_size << std::endl;
+		std::cout << "\nuncompressed filter_log_size: " << filter_log_size << std::endl;
+		std::cout << "uncompressed filter_log_buffer_size: " << filter_log_buffer_size << std::endl;
 
-	std::cout << "uncompressed limit_offset_size: " << limit_offset_size << std::endl;
-	std::cout << "uncompressed limit_offset_buffer_size: " << limit_offset_buffer_size << std::endl;
+		std::cout << "uncompressed limit_offset_size: " << limit_offset_size << std::endl;
+		std::cout << "uncompressed limit_offset_buffer_size: " << limit_offset_buffer_size << std::endl;
 
-	std::cout << "uncompressed perfect_full_scan_ht_log_size: " << perfect_full_scan_ht_log_size << std::endl;
-	std::cout << "uncompressed perfect_full_scan_ht_log_buffer_size: " << perfect_full_scan_ht_log_buffer_size << std::endl;
+		std::cout << "uncompressed perfect_full_scan_ht_log_size: " << perfect_full_scan_ht_log_size << std::endl;
+		std::cout << "uncompressed perfect_full_scan_ht_log_buffer_size: " << perfect_full_scan_ht_log_buffer_size << std::endl;
 
-	std::cout << "uncompressed perfect_probe_ht_log_size: " << perfect_probe_ht_log_size << std::endl;
-	std::cout << "uncompressed perfect_probe_ht_log_buffer_size: " << perfect_probe_ht_log_buffer_size << std::endl;
+		std::cout << "uncompressed perfect_probe_ht_log_size: " << perfect_probe_ht_log_size << std::endl;
+		std::cout << "uncompressed perfect_probe_ht_log_buffer_size: " << perfect_probe_ht_log_buffer_size << std::endl;
 
-	std::cout << "uncompressed row_group_log_size: " << row_group_log_size << std::endl;
-	std::cout << "uncompressed row_group_log_buffer_size: " << row_group_log_buffer_size << std::endl;
+		std::cout << "uncompressed row_group_log_size: " << row_group_log_size << std::endl;
+		std::cout << "uncompressed row_group_log_buffer_size: " << row_group_log_buffer_size << std::endl;
 
-	std::cout << "uncompressed scatter_log_size: " << scatter_log_size << std::endl;
-	std::cout << "uncompressed scatter_log_buffer_size: " << scatter_log_buffer_size << std::endl;
+		std::cout << "uncompressed scatter_log_size: " << scatter_log_size << std::endl;
+		std::cout << "uncompressed scatter_log_buffer_size: " << scatter_log_buffer_size << std::endl;
 
-	std::cout << "uncompressed scatter_sel_log_size: " << scatter_sel_log_size << std::endl;
-	std::cout << "uncompressed scatter_sel_log_buffer_size: " << scatter_sel_log_buffer_size << std::endl;
+		std::cout << "uncompressed scatter_sel_log_size: " << scatter_sel_log_size << std::endl;
+		std::cout << "uncompressed scatter_sel_log_buffer_size: " << scatter_sel_log_buffer_size << std::endl;
 
-	std::cout << "uncompressed gather_log_size: " << gather_log_size << std::endl;
-	std::cout << "uncompressed gather_log_buffer_size: " << gather_log_buffer_size << std::endl;
+		std::cout << "uncompressed gather_log_size: " << gather_log_size << std::endl;
+		std::cout << "uncompressed gather_log_buffer_size: " << gather_log_buffer_size << std::endl;
 
-	std::cout << "uncompressed combine_log_size: " << combine_log_size << std::endl;
-	std::cout << "uncompressed combine_log_buffer_size: " << combine_log_buffer_size << std::endl;
+		std::cout << "uncompressed combine_log_size: " << combine_log_size << std::endl;
+		std::cout << "uncompressed combine_log_buffer_size: " << combine_log_buffer_size << std::endl;
 
-	std::cout << "uncompressed finalize_states_log_size: " << finalize_states_log_size << std::endl;
-	std::cout << "uncompressed finalize_states_log_buffer_size: " << finalize_states_log_buffer_size << std::endl;
+		std::cout << "uncompressed finalize_states_log_size: " << finalize_states_log_size << std::endl;
+		std::cout << "uncompressed finalize_states_log_buffer_size: " << finalize_states_log_buffer_size << std::endl;
 
-	std::cout << "uncompressed join_gather_log_size: " << join_gather_log_size << std::endl;
-	std::cout << "uncompressed join_gather_log_buffer_size: " << join_gather_log_buffer_size << std::endl;
+		std::cout << "uncompressed join_gather_log_size: " << join_gather_log_size << std::endl;
+		std::cout << "uncompressed join_gather_log_buffer_size: " << join_gather_log_buffer_size << std::endl;
 
-	std::cout << "uncompressed reorder_log_size: " << reorder_log_size << std::endl;
-	std::cout << "uncompressed reorder_log_buffer_size: " << reorder_log_buffer_size << std::endl;
+		std::cout << "uncompressed reorder_log_size: " << reorder_log_size << std::endl;
+		std::cout << "uncompressed reorder_log_buffer_size: " << reorder_log_buffer_size << std::endl;
 
-	std::cout << "uncompressed cross_log_size: " << cross_log_size << std::endl;
-	std::cout << "uncompressed cross_log_buffer_size: " << cross_log_buffer_size << std::endl;
+		std::cout << "uncompressed cross_log_size: " << cross_log_size << std::endl;
+		std::cout << "uncompressed cross_log_buffer_size: " << cross_log_buffer_size << std::endl;
 
-	std::cout << "uncompressed nlj_log_size: " << nlj_log_size << std::endl;
-	std::cout << "uncompressed nlj_log_buffer_size: " << nlj_log_buffer_size << std::endl;
+		std::cout << "uncompressed nlj_log_size: " << nlj_log_size << std::endl;
+		std::cout << "uncompressed nlj_log_buffer_size: " << nlj_log_buffer_size << std::endl;
 
-	std::cout << "uncompressed total_size: " << total_size << std::endl;
-	std::cout << "uncompressed total_buffer_size: " << total_buffer_size << std::endl;
-	std::cout << "uncompressed total_element_size: " << total_size - total_buffer_size << std::endl;
+		std::cout << "uncompressed total_size: " << total_size << std::endl;
+		std::cout << "uncompressed total_buffer_size: " << total_buffer_size << std::endl;
+		std::cout << "uncompressed total_element_size: " << total_size - total_buffer_size << std::endl;
 
 	return total_size;
 
 }
 
-size_t LineageManager::GetCompressedArtifactSize() {
+size_t LineageManager::GetCompressedArtifactSize(std::unordered_map<string, size_t>& lop_size,
+                                                 int& physical_op_num) {
 	size_t total_size = 0;
 	size_t total_buffer_size = 0;
 
@@ -648,8 +730,20 @@ size_t LineageManager::GetCompressedArtifactSize() {
 	size_t nlj_log_size = 0;
 	size_t nlj_log_buffer_size = 0;
 
+
+	physical_op_num = physical_lname_relations.size();
+
 	for (const auto& pair : lineage_manager->global_logger){
 		OperatorLineage* lop = pair.second.get();
+		int lop_id = lop->operator_id;
+		string physical_op_name = physical_lname_relations[lop_id];
+
+		// print out the lineage operator name
+
+		size_t op_lineage_size = 0;
+		size_t op_lineage_buffer_size = 0;
+
+
 		for (const auto& pair_log : lop->log){
 			Log* curr_log = pair_log.second.get();
 
@@ -676,6 +770,9 @@ size_t LineageManager::GetCompressedArtifactSize() {
 
 				total_size += tmp_filter_log_size;
 				total_buffer_size += tmp_filter_log_buffer_size;
+
+				op_lineage_size += tmp_filter_log_size;
+				op_lineage_buffer_size += tmp_filter_log_buffer_size;
 			}
 
 			// limit offset log
@@ -694,6 +791,9 @@ size_t LineageManager::GetCompressedArtifactSize() {
 
 				total_size += tmp_limit_offset_size;
 				total_buffer_size += tmp_limit_offset_buffer_size;
+
+				op_lineage_size += tmp_limit_offset_size;
+				op_lineage_buffer_size += tmp_limit_offset_buffer_size;
 			}
 
 			// perfect full scan ht log
@@ -731,6 +831,9 @@ size_t LineageManager::GetCompressedArtifactSize() {
 
 				total_size += tmp_perfect_full_scan_ht_log_size;
 				total_buffer_size += tmp_perfect_full_scan_ht_log_buffer_size;
+
+				op_lineage_size += tmp_perfect_full_scan_ht_log_size;
+				op_lineage_buffer_size += tmp_perfect_full_scan_ht_log_buffer_size;
 			}
 
 			// perfect probe ht log
@@ -741,25 +844,20 @@ size_t LineageManager::GetCompressedArtifactSize() {
 
 				tmp_perfect_probe_ht_log_element_size += curr_log->compressed_perfect_probe_ht_log.GetBytesSize();
 
-				size_t tmp = 0;
 				// left bitmap
 				if(curr_log->compressed_perfect_probe_ht_log.size != 0){
 					idx_t total_bitmap_num = curr_log->compressed_perfect_probe_ht_log.artifacts->start_bitmap_idx[curr_log->compressed_perfect_probe_ht_log.size];
 
 					for(size_t i = 0; i < total_bitmap_num; i++){
 						tmp_perfect_probe_ht_log_buffer_size += curr_log->compressed_perfect_probe_ht_log.artifacts->bitmap_size[i]; // sel_size
-						tmp += curr_log->compressed_perfect_probe_ht_log.artifacts->bitmap_size[i];
 					}
 				}
 
-				tmp = 0;
 				// right bitpack
 				for(size_t i = 0; i < curr_log->compressed_perfect_probe_ht_log.size; i++){
 					if(curr_log->compressed_perfect_probe_ht_log.artifacts->right[i] != 0){
 						tmp_perfect_probe_ht_log_buffer_size += GetSelBitpackSize(reinterpret_cast<sel_t*>(curr_log->compressed_perfect_probe_ht_log.artifacts->right[i]),
-						                                                                curr_log->compressed_perfect_probe_ht_log.artifacts->count[i]); // right
-						tmp += GetSelBitpackSize(reinterpret_cast<sel_t*>(curr_log->compressed_perfect_probe_ht_log.artifacts->right[i]),
-						                      curr_log->compressed_perfect_probe_ht_log.artifacts->count[i]);
+						                                                          curr_log->compressed_perfect_probe_ht_log.artifacts->count[i]); // right
 					}
 				}
 
@@ -770,6 +868,9 @@ size_t LineageManager::GetCompressedArtifactSize() {
 
 				total_size += tmp_perfect_probe_ht_log_size;
 				total_buffer_size += tmp_perfect_probe_ht_log_buffer_size;
+
+				op_lineage_size += tmp_perfect_probe_ht_log_size;
+				op_lineage_buffer_size += tmp_perfect_probe_ht_log_buffer_size;
 			}
 
 			// row group log
@@ -795,6 +896,9 @@ size_t LineageManager::GetCompressedArtifactSize() {
 
 				total_size += tmp_row_group_log_size;
 				total_buffer_size += tmp_row_group_log_buffer_size;
+
+				op_lineage_size += tmp_row_group_log_size;
+				op_lineage_buffer_size += tmp_row_group_log_buffer_size;
 			}
 
 			// scatter log
@@ -821,6 +925,9 @@ size_t LineageManager::GetCompressedArtifactSize() {
 
 				total_size += tmp_scatter_log_size;
 				total_buffer_size += tmp_scatter_log_buffer_size;
+
+				op_lineage_size += tmp_scatter_log_size;
+				op_lineage_buffer_size += tmp_scatter_log_buffer_size;
 			}
 
 			// scatter sel log
@@ -850,7 +957,7 @@ size_t LineageManager::GetCompressedArtifactSize() {
 
 					if(curr_log->compressed_scatter_sel_log.artifacts->sel[i] != 0){
 						tmp_scatter_sel_log_buffer_size += GetDeltaBitpackSize(reinterpret_cast<sel_t*>(curr_log->compressed_scatter_sel_log.artifacts->sel[i]),
-						                                                        curr_log->compressed_scatter_sel_log.artifacts->count[i]); // sel
+						                                                       curr_log->compressed_scatter_sel_log.artifacts->count[i]); // sel
 					}
 
 				}
@@ -862,6 +969,9 @@ size_t LineageManager::GetCompressedArtifactSize() {
 
 				total_size += tmp_scatter_sel_log_size;
 				total_buffer_size += tmp_scatter_sel_log_buffer_size;
+
+				op_lineage_size += tmp_scatter_sel_log_size;
+				op_lineage_buffer_size += tmp_scatter_sel_log_buffer_size;
 			}
 
 			// gather log
@@ -888,6 +998,9 @@ size_t LineageManager::GetCompressedArtifactSize() {
 
 				total_size += tmp_gather_log_size;
 				total_buffer_size += tmp_gather_log_buffer_size;
+
+				op_lineage_size += tmp_gather_log_size;
+				op_lineage_buffer_size += tmp_gather_log_buffer_size;
 			}
 
 			// combine log
@@ -902,12 +1015,12 @@ size_t LineageManager::GetCompressedArtifactSize() {
 					if(curr_log->compressed_combine_log.artifacts->src[i] != 0){
 						tmp_combine_log_buffer_size += GetAddressDeltaRLESize(
 						    reinterpret_cast<data_ptr_t*>(curr_log->compressed_combine_log.artifacts->src[i]),
-						                                   curr_log->compressed_combine_log.artifacts->count[i]);
+						    curr_log->compressed_combine_log.artifacts->count[i]);
 					}
 					if(curr_log->compressed_combine_log.artifacts->target[i] != 0){
 						tmp_combine_log_buffer_size += GetAddressDeltaRLESize(
 						    reinterpret_cast<data_ptr_t*>(curr_log->compressed_combine_log.artifacts->target[i]),
-						                                   curr_log->compressed_combine_log.artifacts->count[i]);
+						    curr_log->compressed_combine_log.artifacts->count[i]);
 					}
 				}
 
@@ -918,6 +1031,9 @@ size_t LineageManager::GetCompressedArtifactSize() {
 
 				total_size += tmp_combine_log_size;
 				total_buffer_size += tmp_combine_log_buffer_size;
+
+				op_lineage_size += tmp_combine_log_size;
+				op_lineage_buffer_size += tmp_combine_log_buffer_size;
 			}
 
 			// finalize states log
@@ -943,6 +1059,9 @@ size_t LineageManager::GetCompressedArtifactSize() {
 
 				total_size += tmp_finalize_states_log_size;
 				total_buffer_size += tmp_finalize_states_log_buffer_size;
+
+				op_lineage_size += tmp_finalize_states_log_size;
+				op_lineage_buffer_size += tmp_finalize_states_log_buffer_size;
 			}
 
 			// join gather log
@@ -956,7 +1075,7 @@ size_t LineageManager::GetCompressedArtifactSize() {
 				for(size_t i = 0; i < curr_log->compressed_join_gather_log.size; i++){
 					if(curr_log->compressed_join_gather_log.artifacts->rhs[i] != 0){
 						tmp_join_gather_log_buffer_size += GetAddressRLEBitpackSize(reinterpret_cast<data_ptr_t*>(curr_log->compressed_join_gather_log.artifacts->rhs[i]),
-						                                                           curr_log->compressed_join_gather_log.artifacts->count[i],
+						                                                            curr_log->compressed_join_gather_log.artifacts->count[i],
 						                                                            curr_log->compressed_join_gather_log.artifacts->use_rle[i]); // rhs
 					}
 				}
@@ -976,6 +1095,9 @@ size_t LineageManager::GetCompressedArtifactSize() {
 
 				total_size += tmp_join_gather_log_size;
 				total_buffer_size += tmp_join_gather_log_buffer_size;
+
+				op_lineage_size += tmp_join_gather_log_size;
+				op_lineage_buffer_size += tmp_join_gather_log_buffer_size;
 			}
 
 			// reorder log
@@ -984,7 +1106,7 @@ size_t LineageManager::GetCompressedArtifactSize() {
 				size_t tmp_reorder_log_buffer_size = 0;
 				size_t tmp_reorder_log_element_size = 0;
 
-				tmp_reorder_log_element_size += sizeof(vector<CompressedReorderLogArtifactList>);
+//				tmp_reorder_log_element_size += sizeof(vector<CompressedReorderLogArtifactList>);
 				tmp_reorder_log_element_size += curr_log->compressed_reorder_log.capacity() * sizeof(CompressedReorderLogArtifactList);
 
 				for(size_t i = 0; i < curr_log->compressed_reorder_log.size(); i++){
@@ -1000,6 +1122,9 @@ size_t LineageManager::GetCompressedArtifactSize() {
 
 				total_size += tmp_reorder_log_size;
 				total_buffer_size += tmp_reorder_log_buffer_size;
+
+				op_lineage_size += tmp_reorder_log_size;
+				op_lineage_buffer_size += tmp_reorder_log_buffer_size;
 			}
 
 			// cross log
@@ -1019,6 +1144,9 @@ size_t LineageManager::GetCompressedArtifactSize() {
 
 				total_size += tmp_cross_log_size;
 				total_buffer_size += tmp_cross_log_buffer_size;
+
+				op_lineage_size += tmp_cross_log_size;
+				op_lineage_buffer_size += tmp_cross_log_buffer_size;
 			}
 
 			// nlj log
@@ -1051,55 +1179,74 @@ size_t LineageManager::GetCompressedArtifactSize() {
 
 				total_size += tmp_nlj_log_size;
 				total_buffer_size += tmp_nlj_log_buffer_size;
+
+				op_lineage_size += tmp_nlj_log_size;
+				op_lineage_buffer_size += tmp_nlj_log_buffer_size;
 			}
 		}
+
+//		std::cout << "This physical operator is " << physical_op_name << " " << lop_id << " " << std::hex << "0x" << reinterpret_cast<idx_t>(lop) << std::dec << " " << op_lineage_size << std::endl;
+		// check if the operator lineage is already in the map
+//		std::cout << physical_lname_relations[lop->operator_id] << "is it." << std::endl;
+		if(lop_size.find(physical_lname_relations[lop->operator_id]) == lop_size.end()){
+			lop_size[physical_lname_relations[lop->operator_id]] = op_lineage_size;
+		} else {
+			lop_size[physical_lname_relations[lop->operator_id]] += op_lineage_size;
+		}
+
 	}
 
-	std::cout << "\ncompressed filter_log_size: " << filter_log_size << std::endl;
-	std::cout << "compressed filter_log_buffer_size: " << filter_log_buffer_size << std::endl;
+	// print out the size of each operator lineage
+//	std::cout << std::endl;
+//	for (const auto& pair : lop_size){
+//		std::cout << "Physical Operator: " << pair.first << " size: " << pair.second << std::endl;
+//	}
 
-	std::cout << "compressed limit_offset_size: " << limit_offset_size << std::endl;
-	std::cout << "compressed limit_offset_buffer_size: " << limit_offset_buffer_size << std::endl;
+		std::cout << "\ncompressed filter_log_size: " << filter_log_size << std::endl;
+		std::cout << "compressed filter_log_buffer_size: " << filter_log_buffer_size << std::endl;
 
-	std::cout << "compressed perfect_full_scan_ht_log_size: " << perfect_full_scan_ht_log_size << std::endl;
-	std::cout << "compressed perfect_full_scan_ht_log_buffer_size: " << perfect_full_scan_ht_log_buffer_size << std::endl;
+		std::cout << "compressed limit_offset_size: " << limit_offset_size << std::endl;
+		std::cout << "compressed limit_offset_buffer_size: " << limit_offset_buffer_size << std::endl;
 
-	std::cout << "compressed perfect_probe_ht_log_size: " << perfect_probe_ht_log_size << std::endl;
-	std::cout << "compressed perfect_probe_ht_log_buffer_size: " << perfect_probe_ht_log_buffer_size << std::endl;
+		std::cout << "compressed perfect_full_scan_ht_log_size: " << perfect_full_scan_ht_log_size << std::endl;
+		std::cout << "compressed perfect_full_scan_ht_log_buffer_size: " << perfect_full_scan_ht_log_buffer_size << std::endl;
 
-	std::cout << "compressed row_group_log_size: " << row_group_log_size << std::endl;
-	std::cout << "compressed row_group_log_buffer_size: " << row_group_log_buffer_size << std::endl;
+		std::cout << "compressed perfect_probe_ht_log_size: " << perfect_probe_ht_log_size << std::endl;
+		std::cout << "compressed perfect_probe_ht_log_buffer_size: " << perfect_probe_ht_log_buffer_size << std::endl;
 
-	std::cout << "compressed scatter_log_size: " << scatter_log_size << std::endl;
-	std::cout << "compressed scatter_log_buffer_size: " << scatter_log_buffer_size << std::endl;
+		std::cout << "compressed row_group_log_size: " << row_group_log_size << std::endl;
+		std::cout << "compressed row_group_log_buffer_size: " << row_group_log_buffer_size << std::endl;
 
-	std::cout << "compressed scatter_sel_log_size: " << scatter_sel_log_size << std::endl;
-	std::cout << "compressed scatter_sel_log_buffer_size: " << scatter_sel_log_buffer_size << std::endl;
+		std::cout << "compressed scatter_log_size: " << scatter_log_size << std::endl;
+		std::cout << "compressed scatter_log_buffer_size: " << scatter_log_buffer_size << std::endl;
 
-	std::cout << "compressed gather_log_size: " << gather_log_size << std::endl;
-	std::cout << "compressed gather_log_buffer_size: " << gather_log_buffer_size << std::endl;
+		std::cout << "compressed scatter_sel_log_size: " << scatter_sel_log_size << std::endl;
+		std::cout << "compressed scatter_sel_log_buffer_size: " << scatter_sel_log_buffer_size << std::endl;
 
-	std::cout << "compressed combine_log_size: " << combine_log_size << std::endl;
-	std::cout << "compressed combine_log_buffer_size: " << combine_log_buffer_size << std::endl;
+		std::cout << "compressed gather_log_size: " << gather_log_size << std::endl;
+		std::cout << "compressed gather_log_buffer_size: " << gather_log_buffer_size << std::endl;
 
-	std::cout << "compressed finalize_states_log_size: " << finalize_states_log_size << std::endl;
-	std::cout << "compressed finalize_states_log_buffer_size: " << finalize_states_log_buffer_size << std::endl;
+		std::cout << "compressed combine_log_size: " << combine_log_size << std::endl;
+		std::cout << "compressed combine_log_buffer_size: " << combine_log_buffer_size << std::endl;
 
-	std::cout << "compressed join_gather_log_size: " << join_gather_log_size << std::endl;
-	std::cout << "compressed join_gather_log_buffer_size: " << join_gather_log_buffer_size << std::endl;
+		std::cout << "compressed finalize_states_log_size: " << finalize_states_log_size << std::endl;
+		std::cout << "compressed finalize_states_log_buffer_size: " << finalize_states_log_buffer_size << std::endl;
 
-	std::cout << "compressed reorder_log_size: " << reorder_log_size << std::endl;
-	std::cout << "compressed reorder_log_buffer_size: " << reorder_log_buffer_size << std::endl;
+		std::cout << "compressed join_gather_log_size: " << join_gather_log_size << std::endl;
+		std::cout << "compressed join_gather_log_buffer_size: " << join_gather_log_buffer_size << std::endl;
 
-	std::cout << "compressed cross_log_size: " << cross_log_size << std::endl;
-	std::cout << "compressed cross_log_buffer_size: " << cross_log_buffer_size << std::endl;
+		std::cout << "compressed reorder_log_size: " << reorder_log_size << std::endl;
+		std::cout << "compressed reorder_log_buffer_size: " << reorder_log_buffer_size << std::endl;
 
-	std::cout << "compressed nlj_log_size: " << nlj_log_size << std::endl;
-	std::cout << "compressed nlj_log_buffer_size: " << nlj_log_buffer_size << std::endl;
+		std::cout << "compressed cross_log_size: " << cross_log_size << std::endl;
+		std::cout << "compressed cross_log_buffer_size: " << cross_log_buffer_size << std::endl;
 
-	std::cout << "compressed total_size: " << total_size << std::endl;
-	std::cout << "compressed total_buffer_size: " << total_buffer_size << std::endl;
-	std::cout << "compressed total_element_size: " << total_size - total_buffer_size << std::endl;
+		std::cout << "compressed nlj_log_size: " << nlj_log_size << std::endl;
+		std::cout << "compressed nlj_log_buffer_size: " << nlj_log_buffer_size << std::endl;
+
+		std::cout << "compressed total_size: " << total_size << std::endl;
+		std::cout << "compressed total_buffer_size: " << total_buffer_size << std::endl;
+		std::cout << "compressed total_element_size: " << total_size - total_buffer_size << std::endl;
 
 	return total_size;
 }

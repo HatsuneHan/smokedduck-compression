@@ -123,7 +123,7 @@ struct nlj_artifact {
 */
 class Log {
 public:
-	explicit Log() : capture(false) {}
+	explicit Log() : capture(false){}
 
   std::pair<int, int> LatestLSN();
   void SetLatestLSN(std::pair<int, int>);
