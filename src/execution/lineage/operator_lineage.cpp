@@ -459,9 +459,9 @@ void OperatorLineage::PostProcess() {
 				  delete[] payload;
 			  }
 		  }
-		  std::cout << "start Clear\n";
+		  // std::cout << "start Clear\n";
 		  log[tkey]->compressed_join_gather_log.Clear();
-		  std::cout << "end Clear\n";
+		  // std::cout << "end Clear\n";
 
 	  } else {
 		  if (log.count(tkey) == 0 || log[tkey]->join_gather_log.empty()){

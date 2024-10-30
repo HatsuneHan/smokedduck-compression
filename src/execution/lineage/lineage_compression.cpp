@@ -530,6 +530,9 @@ namespace duckdb {
 
 			    if(bitmap_is_compressed){
 				    sel_t* sel_bitpack = ChangeBitpackToSelData(reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx]), count);
+				    for(size_t i = 0; i < count; i++){
+					    sel_bitpack[i] += offset;
+				    }
 					return sel_bitpack;
 			    }else{
 				    sel_t* bitmap_sel = reinterpret_cast<sel_t*>(artifacts->bitmap[start_bitmap_idx]);
