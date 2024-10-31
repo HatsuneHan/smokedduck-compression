@@ -225,7 +225,7 @@ void OperatorLineage::PostProcess() {
 			  idx_t is_ascend_count = log[tkey]->compressed_scatter_sel_log.artifacts->is_ascend[k];
 
 			  data_ptr_t* payload;
-			  if(is_ascend_count <= 2){
+			  if(res_count / (is_ascend_count+1) >= 16){
 				  payload = ChangeDeltaRLEToAddress(compressed_payload, res_count);
 			  } else {
 				  payload = ChangeBitpackToAddress(compressed_payload, res_count, is_ascend_count);
@@ -257,7 +257,7 @@ void OperatorLineage::PostProcess() {
 				  }
 			  }
 
-			  if((is_ascend_count <= 2 && res_count > 8) || (is_ascend_count > 2 && res_count >= 4)){
+			  if(((res_count / (is_ascend_count+1) >= 16) && res_count > 8) || ((res_count / (is_ascend_count+1) < 16) && res_count >= 4)){
 				  delete[] payload;
 			  }
 

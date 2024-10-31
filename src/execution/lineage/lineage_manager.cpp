@@ -943,7 +943,7 @@ size_t LineageManager::GetCompressedArtifactSize(std::unordered_map<string, size
 				for(size_t i = 0; i < curr_log->compressed_scatter_sel_log.size; i++){
 
 					if(curr_log->compressed_scatter_sel_log.artifacts->addresses[i] != 0){
-						if(curr_log->compressed_scatter_sel_log.artifacts->is_ascend[i] <= 2){
+						if(curr_log->compressed_scatter_sel_log.artifacts->count[i] / (curr_log->compressed_scatter_sel_log.artifacts->is_ascend[i]+1) >= 16){
 							tmp_scatter_sel_log_buffer_size += GetAddressDeltaRLESize(
 							    reinterpret_cast<data_ptr_t*>(curr_log->compressed_scatter_sel_log.artifacts->addresses[i]),
 							    curr_log->compressed_scatter_sel_log.artifacts->count[i]);

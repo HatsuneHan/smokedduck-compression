@@ -147,8 +147,6 @@ void PerfectAggregateHashTable::AddChunk(DataChunk &groups, DataChunk &payload) 
 			for (idx_t i = 1; i < groups.size(); i++) {
 				if (reinterpret_cast<idx_t>(ptrs[i]) < reinterpret_cast<idx_t>(ptrs[i - 1])) {
 					is_ascend_count++;
-					if(is_ascend_count > 2)
-						break;
 				}
 			}
 

@@ -780,7 +780,7 @@ namespace duckdb {
 	    }
 
 	    // case 2 ascending order, use delta bitpack
-	    if(is_ascend <= 2){
+	    if(count / (is_ascend+1) >= 16){
 		    // we need is_ascend + 1 Compressed64ListDelta*
 		    Compressed64ListDelta** compressed_delta_list = new Compressed64ListDelta*[is_ascend+1];
 		    idx_t curr_idx = 0;
@@ -842,7 +842,7 @@ namespace duckdb {
 		    return compressed_list;
 	    }
 
-	    if(is_ascend <= 2){
+	    if(count / (is_ascend+1) >= 16){
 		    Compressed64ListDelta** compressed_delta_list = reinterpret_cast<Compressed64ListDelta**>(compressed_list);
 		    data_ptr_t * address_data = new data_ptr_t[count];
 
@@ -878,7 +878,7 @@ namespace duckdb {
 
 	    if(count < 4){
 		    return sizeof(data_ptr_t) * count;
-	    } else if (is_ascend <= 2){
+	    } else if (count / (is_ascend+1) >= 16){
 		    Compressed64ListDelta** compressed_delta_list = reinterpret_cast<Compressed64ListDelta**>(compressed_list);
 		    size_t total_size = 0;
 		    total_size += sizeof(Compressed64ListDelta*) * (is_ascend+1);

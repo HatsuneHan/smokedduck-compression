@@ -492,7 +492,7 @@ public:
 			if(artifacts->count[i] < 4){
 				data_ptr_t* addresses_addr = reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
 				delete[] addresses_addr;
-			} else if(artifacts->is_ascend[i] <= 2){
+			} else if((artifacts->count[i] / (artifacts->is_ascend[i]+1)) >= 16){
 				Compressed64ListDelta** compressed_delta_list = reinterpret_cast<Compressed64ListDelta**>(artifacts->addresses[i]);
 				delete[] compressed_delta_list;
 			} else {
@@ -509,7 +509,7 @@ public:
 			if(artifacts->count[i] < 4){
 				data_ptr_t* addresses_addr = reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
 				delete[] addresses_addr;
-			} else if(artifacts->is_ascend[i] <= 2){
+			} else if((artifacts->count[i] / (artifacts->is_ascend[i]+1)) >= 16){
 				Compressed64ListDelta** compressed_delta_list = reinterpret_cast<Compressed64ListDelta**>(artifacts->addresses[i]);
 				delete[] compressed_delta_list;
 			} else {
@@ -749,7 +749,7 @@ public:
 			idx_t res_count = artifacts->count[i];
 			idx_t is_ascend = artifacts->is_ascend[i];
 
-			if(is_ascend <= 2){
+			if(res_count / (is_ascend+1) >= 16){
 				if(res_count <= 8){
 					delete[] reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
 				} else {
@@ -788,7 +788,7 @@ public:
 			idx_t res_count = artifacts->count[i];
 			idx_t is_ascend = artifacts->is_ascend[i];
 
-			if(is_ascend <= 2){
+			if(res_count / (is_ascend+1) >= 16){
 				if(res_count <= 8){
 					delete[] reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
 				} else {

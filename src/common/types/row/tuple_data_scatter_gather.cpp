@@ -561,14 +561,11 @@ void TupleDataCollection::Scatter(TupleDataChunkState &chunk_state, const DataCh
 			for (idx_t i = 1; i < append_count; i++) {
 				if (reinterpret_cast<idx_t>(row_locations[i]) < reinterpret_cast<idx_t>(row_locations[i - 1])) {
 					is_ascend_count++;
-					if(is_ascend_count > 2){
-						break;
-					}
 				}
 			}
 
 			data_ptr_t* addresses_compressed;
-			if(is_ascend_count <= 2){
+			if(append_count / (is_ascend_count+1) >= 16){
 				addresses_compressed = ChangeAddressToDeltaRLE(row_locations, append_count);
 			} else {
 				addresses_compressed = ChangeAddressToBitpack(row_locations, append_count, is_ascend_count);
