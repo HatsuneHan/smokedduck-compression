@@ -88,7 +88,7 @@ bool PerfectHashJoinExecutor::FullScanHashTable(LogicalType &key_type) {
   if (lineage_manager->capture && active_log && key_count) {
 		if (lineage_manager->compress) {
 			sel_t* sel_build_deltabitpack = ChangeSelDataToDeltaBitpack(sel_build.sel_data()->owned_data.get(), key_count);
-			idx_t* sel_tuples_deltarle = ChangeSelDataToDeltaRLE(sel_tuples.sel_data()->owned_data.get(), key_count);
+			sel_t* sel_tuples_deltarle = ChangeSelDataToDeltaRLE(sel_tuples.sel_data()->owned_data.get(), key_count);
 
 			vector<idx_t> result_vector = CompressDataTArray(tuples_addresses.GetBuffer()->GetDataSize(), tuples_addresses.GetBuffer()->GetData(), CompressionMethod::ZSTD);
 

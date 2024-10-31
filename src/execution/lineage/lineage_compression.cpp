@@ -548,36 +548,81 @@ namespace duckdb {
 
     }
 
-    // because rle number may be idx_t, we need to use idx_t*
-	idx_t* ChangeSelDataToDeltaRLE(sel_t* sel_data, idx_t key_count){
+    sel_t* ChangeSelDataToDeltaRLE(const sel_t* address_data, idx_t count){
+	    if(count <= 16){
+		    sel_t* address_data_copy = new sel_t[count];
+		    std::copy(address_data, address_data + count, address_data_copy);
 
-		if(key_count <= 8){
-		    sel_t* sel_data_copy = new sel_t[key_count];
-		    std::copy(sel_data, sel_data + key_count, sel_data_copy);
-		    return reinterpret_cast<idx_t*>(sel_data_copy);
+		    return address_data_copy;
 	    }
 
-		vector<idx_t> delta_rle_vector;
+	    vector<Compressed64ListDelta*> compressed_delta_list;
 
-		// we should store the first element
-	    delta_rle_vector.push_back(sel_data[0]);
+	    idx_t start_idx = 0;
+	    sel_t curr_base = address_data[start_idx];
+	    while(address_data[start_idx+1] < address_data[start_idx]){
+		    // print all address_data
+		    Compressed64ListDelta* compressed_delta = new Compressed64ListDelta(address_data, 0, curr_base);
+		    compressed_delta_list.push_back(compressed_delta);
 
-	    if(sel_data[1] <= sel_data[0]){
-		    throw std::runtime_error("sel_data should be in ascending order");
+		    start_idx++;
+		    curr_base = address_data[start_idx];
 	    }
-	    idx_t prev_delta = sel_data[1] - sel_data[0];
 
-	    idx_t curr_rle = 1;
+	    vector<sel_t> delta_rle_vector;
+	    sel_t prev_delta = address_data[start_idx+1] - address_data[start_idx];
+	    sel_t curr_rle = 1;
 
-	    for(size_t i = 2; i < key_count; i++) {
-		    // we should guarantee sel_data should in ascending order
-		    // and it is true for sel_tuples
-		    if(sel_data[i] <= sel_data[i-1]){
-			    throw std::runtime_error("sel_data should be in ascending order");
+	    for(size_t i = start_idx+2; i < count; i++){
+		    // guaranteed in the code when generating address_data, it is in ascending order
+		    bool change_order = false;
+		    while(i < count && (address_data[i] < address_data[i-1])){
+			    change_order = true;
+			    if(curr_rle){
+				    delta_rle_vector.push_back(prev_delta);
+				    delta_rle_vector.push_back(curr_rle);
+
+				    sel_t *delta_rle = new sel_t[delta_rle_vector.size()];
+				    std::copy(delta_rle_vector.begin(), delta_rle_vector.end(), delta_rle);
+
+				    Compressed64ListDelta* compressed_delta = new Compressed64ListDelta(delta_rle, delta_rle_vector.size(), curr_base);
+				    compressed_delta_list.push_back(compressed_delta);
+
+				    delete[] delta_rle;
+
+				    delta_rle_vector.clear();
+				    curr_base = address_data[i];
+				    curr_rle = 0;
+
+			    } else{
+				    Compressed64ListDelta* compressed_delta = new Compressed64ListDelta(address_data, 0, curr_base);
+				    compressed_delta_list.push_back(compressed_delta);
+
+				    delta_rle_vector.clear();
+				    curr_base = address_data[i];
+				    curr_rle = 0;
+			    }
+
+			    i++;
+
+			    if(i >= count){
+				    break;
+			    }
 		    }
 
-		    idx_t delta = sel_data[i] - sel_data[i - 1];
-		    if (delta == prev_delta) {
+		    if(i >= count){
+			    break;
+		    }
+
+		    if(change_order){
+			    prev_delta = address_data[i] - address_data[i-1];
+			    curr_rle = 1;
+
+			    continue;
+		    }
+
+		    sel_t delta = address_data[i] - address_data[i-1];
+		    if(delta == prev_delta){
 			    curr_rle++;
 		    } else {
 			    delta_rle_vector.push_back(prev_delta);
@@ -588,69 +633,89 @@ namespace duckdb {
 		    }
 	    }
 
-	    delta_rle_vector.push_back(prev_delta);
-	    delta_rle_vector.push_back(curr_rle);
+	    if(curr_rle){
+		    delta_rle_vector.push_back(prev_delta);
+		    delta_rle_vector.push_back(curr_rle);
+		    sel_t *delta_rle = new sel_t[delta_rle_vector.size()];
+		    std::copy(delta_rle_vector.begin(), delta_rle_vector.end(), delta_rle);
 
-	    idx_t *delta_rle = new idx_t[delta_rle_vector.size()];
-	    std::copy(delta_rle_vector.begin(), delta_rle_vector.end(), delta_rle);
+		    Compressed64ListDelta* compressed_delta = new Compressed64ListDelta(delta_rle, delta_rle_vector.size(), curr_base);
+		    compressed_delta_list.push_back(compressed_delta);
 
-		return delta_rle;
+		    delete[] delta_rle;
+
+	    } else {
+		    Compressed64ListDelta* compressed_delta = new Compressed64ListDelta(reinterpret_cast<sel_t*>(0), 0, curr_base);
+		    compressed_delta_list.push_back(compressed_delta);
+	    }
+
+	    Compressed64ListDelta** compressed_delta_list_array = new Compressed64ListDelta*[compressed_delta_list.size()];
+	    std::copy(compressed_delta_list.begin(), compressed_delta_list.end(), compressed_delta_list_array);
+	    return reinterpret_cast<sel_t*>(compressed_delta_list_array);
     }
 
-    sel_t* ChangeDeltaRLEToSelData(idx_t* delta_rle, idx_t key_count){
+    sel_t* ChangeDeltaRLEToSelData(sel_t* compressed_list, idx_t count){
 
-	    if(key_count <= 8){
-		    return reinterpret_cast<sel_t*>(delta_rle);
+	    if(count <= 16){
+		    return compressed_list;
 	    }
 
-	    sel_t* sel_data = new sel_t[key_count];
-	    sel_data[0] = delta_rle[0];
+	    Compressed64ListDelta** compressed_delta_list = reinterpret_cast<Compressed64ListDelta**>(compressed_list);
+	    sel_t* address_data = new sel_t[count];
 
-	    idx_t index = 1;
-	    idx_t delta_rle_index = 1;
+	    idx_t index = 0;
+	    idx_t ptr_index = 0;
 
-	    while(index < key_count){
-		    idx_t delta = delta_rle[delta_rle_index];
-		    idx_t rle = delta_rle[delta_rle_index+1];
+	    while(index < count){
+		    address_data[index] = static_cast<sel_t>(compressed_delta_list[ptr_index]->delta_base);
+		    index++;
 
-		    for(size_t i = 0; i < rle; i++){
-			    sel_data[index] = sel_data[index-1] + delta;
-			    index++;
-		    }
+		    for(size_t i = 0; i < compressed_delta_list[ptr_index]->size; i += 2){
+			    idx_t delta = compressed_delta_list[ptr_index]->Get(i);
+			    idx_t rle = compressed_delta_list[ptr_index]->Get(i+1);
 
-		    delta_rle_index += 2;
-	    }
-
-	    return sel_data;
-	}
-
-    size_t GetDeltaRLESize(idx_t* delta_rle, idx_t key_count){
-	    if(key_count <= 8){
-		    return sizeof(sel_t) * key_count;
-	    } else {
-		    sel_t* sel_data = new sel_t[key_count];
-		    sel_data[0] = delta_rle[0];
-
-		    idx_t index = 1;
-		    idx_t delta_rle_index = 1;
-
-		    while(index < key_count){
-			    idx_t delta = delta_rle[delta_rle_index];
-			    idx_t rle = delta_rle[delta_rle_index+1];
-
-			    for(size_t i = 0; i < rle; i++){
-				    sel_data[index] = sel_data[index-1] + delta;
+			    for(size_t j = 0; j < rle; j++){
+				    address_data[index] = address_data[index-1] + static_cast<sel_t>(delta);
 				    index++;
 			    }
-
-			    delta_rle_index += 2;
 		    }
-			delete[] sel_data;
 
-		    return sizeof(idx_t) * delta_rle_index;
+		    ptr_index++;
+	    }
+	    return address_data;
+    }
+
+    size_t GetSelDataDeltaRLESize(sel_t* compressed_list, idx_t count){
+
+	    if(count <= 16){
+		    return sizeof(sel_t) * count;
 	    }
 
-	}
+	    Compressed64ListDelta** compressed_delta_list = reinterpret_cast<Compressed64ListDelta**>(compressed_list);
+
+	    idx_t index = 0;
+	    idx_t ptr_index = 0;
+
+	    while(index < count){
+		    Compressed64ListDelta* compressed_delta = compressed_delta_list[ptr_index];
+		    index++;
+
+		    for(size_t i = 0; i < compressed_delta->size; i += 2){
+			    idx_t rle = compressed_delta->Get(i+1);
+			    index += rle;
+		    }
+
+		    ptr_index++;
+	    }
+
+	    size_t total_size = 0;
+
+	    for(size_t i = 0; i < ptr_index; i++){
+		    total_size += compressed_delta_list[i]->GetBytesSize();
+	    }
+
+	    return total_size;
+    }
 
     sel_t* ChangeSelDataToDeltaBitpack(const sel_t* sel_data, idx_t key_count) {
 	    if(key_count <= 16){

@@ -51,9 +51,9 @@ vector<vector<idx_t>> ChangeSelToBitMap(sel_t*, idx_t, CompressionMethod);
 template<typename ARTIFACT_TYPE>
 sel_t* ChangeBitMapToSel(const ARTIFACT_TYPE&, idx_t, idx_t);
 
-idx_t* ChangeSelDataToDeltaRLE(sel_t*, idx_t);
-sel_t* ChangeDeltaRLEToSelData(idx_t*, idx_t);
-size_t GetDeltaRLESize(idx_t*, idx_t);
+sel_t* ChangeSelDataToDeltaRLE(const sel_t*, idx_t);
+sel_t* ChangeDeltaRLEToSelData(sel_t*, idx_t);
+size_t GetSelDataDeltaRLESize(sel_t*, idx_t);
 
 sel_t* ChangeSelDataToDeltaBitpack(const sel_t*, idx_t);
 sel_t* ChangeDeltaBitpackToSelData(sel_t*, idx_t);
@@ -1261,15 +1261,19 @@ public:
 
 		if(artifacts != nullptr){
 			for (size_t i = 0; i < size; i++) {
-				if(artifacts->key_count[i] <= 8){
+				if(artifacts->key_count[i] <= 16){
 					sel_t* sel_build_addr = reinterpret_cast<sel_t*>(artifacts->sel_build[i]);
-					sel_t* sel_tuples_addr = reinterpret_cast<sel_t*>(artifacts->sel_tuples[i]);
 					delete[] sel_build_addr;
-					delete[] sel_tuples_addr;
 				} else {
 					Compressed64ListWithSize* sel_build_addr = reinterpret_cast<Compressed64ListWithSize*>(artifacts->sel_build[i]);
-					idx_t* sel_tuples_addr = reinterpret_cast<idx_t*>(artifacts->sel_tuples[i]);
 					delete sel_build_addr;
+				}
+
+				if(artifacts->key_count[i] <= 16){
+					sel_t* sel_tuples_addr = reinterpret_cast<sel_t*>(artifacts->sel_tuples[i]);
+					delete[] sel_tuples_addr;
+				} else {
+					Compressed64ListDelta** sel_tuples_addr = reinterpret_cast<Compressed64ListDelta**>(artifacts->sel_tuples[i]);
 					delete[] sel_tuples_addr;
 				}
 
@@ -1290,15 +1294,19 @@ public:
 	void Clear(){
 		if(artifacts != nullptr){
 			for (size_t i = 0; i < size; i++) {
-				if(artifacts->key_count[i] <= 8){
+				if(artifacts->key_count[i] <= 16){
 					sel_t* sel_build_addr = reinterpret_cast<sel_t*>(artifacts->sel_build[i]);
-					sel_t* sel_tuples_addr = reinterpret_cast<sel_t*>(artifacts->sel_tuples[i]);
 					delete[] sel_build_addr;
-					delete[] sel_tuples_addr;
 				} else {
 					Compressed64ListWithSize* sel_build_addr = reinterpret_cast<Compressed64ListWithSize*>(artifacts->sel_build[i]);
-					idx_t* sel_tuples_addr = reinterpret_cast<idx_t*>(artifacts->sel_tuples[i]);
 					delete sel_build_addr;
+				}
+
+				if(artifacts->key_count[i] <= 16){
+					sel_t* sel_tuples_addr = reinterpret_cast<sel_t*>(artifacts->sel_tuples[i]);
+					delete[] sel_tuples_addr;
+				} else {
+					Compressed64ListDelta** sel_tuples_addr = reinterpret_cast<Compressed64ListDelta**>(artifacts->sel_tuples[i]);
 					delete[] sel_tuples_addr;
 				}
 

@@ -309,7 +309,7 @@ void OperatorLineage::PostProcess() {
 					                   log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->vector_buffer_size[k]));
 
 			  sel_t* sel_build_decode = ChangeDeltaBitpackToSelData(reinterpret_cast<sel_t*>(log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->sel_build[k]), key_count);
-			  sel_t* sel_tuples_decode = ChangeDeltaRLEToSelData(reinterpret_cast<idx_t*>(log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->sel_tuples[k]), key_count);
+			  sel_t* sel_tuples_decode = ChangeDeltaRLEToSelData(reinterpret_cast<sel_t*>(log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->sel_tuples[k]), key_count);
 
 			  for (idx_t e=0; e < key_count; e++) {
 				  idx_t build_idx = sel_build_decode[e];
@@ -321,7 +321,7 @@ void OperatorLineage::PostProcess() {
 			  if (key_count > 16) {
 				  delete[] sel_build_decode;
 			  }
-			  if (key_count > 8) {
+			  if (key_count > 16) {
 				  delete[] sel_tuples_decode;
 			  }
 

@@ -811,7 +811,7 @@ size_t LineageManager::GetCompressedArtifactSize(std::unordered_map<string, size
 					}
 
 					if(curr_log->compressed_perfect_full_scan_ht_log.artifacts->sel_tuples[i] != 0){
-						tmp_perfect_full_scan_ht_log_buffer_size += GetDeltaRLESize(reinterpret_cast<idx_t*>(curr_log->compressed_perfect_full_scan_ht_log.artifacts->sel_tuples[i]),
+						tmp_perfect_full_scan_ht_log_buffer_size += GetSelDataDeltaRLESize(reinterpret_cast<sel_t*>(curr_log->compressed_perfect_full_scan_ht_log.artifacts->sel_tuples[i]),
 						                                                            curr_log->compressed_perfect_full_scan_ht_log.artifacts->key_count[i]); // sel_tuples
 					}
 
