@@ -302,11 +302,17 @@ void OperatorLineage::PostProcess() {
 		  for (size_t k = 0; k < log[tkey]->compressed_perfect_full_scan_ht_log.size; k++) {
 			  idx_t key_count = log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->key_count[k];
 			  idx_t ht_count = log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->ht_count[k];
-			  data_ptr_t* ptr = reinterpret_cast<data_ptr_t*>(
-				  DecompressDataTArray(log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->compressed_row_locations_size[k],
-					                   log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->row_locations_is_compressed[k],
-					                   reinterpret_cast<data_ptr_t>(log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->compressed_row_locations[k]),
-					                   log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->vector_buffer_size[k]));
+
+			  data_ptr_t* compressed_row_locations = reinterpret_cast<data_ptr_t*>(log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->compressed_row_locations[k]);
+			  idx_t compressed_row_locations_size = log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->compressed_row_locations_size[k];
+			  idx_t is_ascend = log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->is_ascend[k];
+
+			  data_ptr_t* ptr;
+			  if(compressed_row_locations_size / (is_ascend+1) >= 16){
+				  ptr = ChangeDeltaRLEToAddress(compressed_row_locations, compressed_row_locations_size);
+			  } else {
+				  ptr = ChangeBitpackToAddress(compressed_row_locations, compressed_row_locations_size, is_ascend);
+			  }
 
 			  sel_t* sel_build_decode = ChangeDeltaBitpackToSelData(reinterpret_cast<sel_t*>(log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->sel_build[k]), key_count);
 			  sel_t* sel_tuples_decode = ChangeDeltaRLEToSelData(reinterpret_cast<sel_t*>(log[tkey]->compressed_perfect_full_scan_ht_log.artifacts->sel_tuples[k]), key_count);
@@ -323,6 +329,10 @@ void OperatorLineage::PostProcess() {
 			  }
 			  if (key_count > 16) {
 				  delete[] sel_tuples_decode;
+			  }
+
+			  if(((compressed_row_locations_size / (is_ascend+1) >= 16) && compressed_row_locations_size > 8) || ((compressed_row_locations_size / (is_ascend+1) < 16) && compressed_row_locations_size >= 4)){
+				  delete[] ptr;
 			  }
 
 		  }

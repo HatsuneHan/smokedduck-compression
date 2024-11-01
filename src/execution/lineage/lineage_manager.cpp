@@ -816,10 +816,17 @@ size_t LineageManager::GetCompressedArtifactSize(std::unordered_map<string, size
 					}
 
 					if(curr_log->compressed_perfect_full_scan_ht_log.artifacts->compressed_row_locations[i] != 0){
-						if(curr_log->compressed_perfect_full_scan_ht_log.artifacts->row_locations_is_compressed[i] == 0){
-							tmp_perfect_full_scan_ht_log_buffer_size += sizeof(data_t) * curr_log->compressed_perfect_full_scan_ht_log.artifacts->vector_buffer_size[i]; // row_locations
+						idx_t row_locations_size = curr_log->compressed_perfect_full_scan_ht_log.artifacts->compressed_row_locations_size[i];
+						idx_t is_ascend = curr_log->compressed_perfect_full_scan_ht_log.artifacts->is_ascend[i];
+
+						if(row_locations_size / (is_ascend+1) >= 16){
+							tmp_perfect_full_scan_ht_log_buffer_size += GetAddressDeltaRLESize(
+							    reinterpret_cast<data_ptr_t*>(curr_log->compressed_perfect_full_scan_ht_log.artifacts->compressed_row_locations[i]),
+							    row_locations_size);
 						} else {
-							tmp_perfect_full_scan_ht_log_buffer_size += sizeof(unsigned char) * curr_log->compressed_perfect_full_scan_ht_log.artifacts->compressed_row_locations_size[i]; // row_locations
+							tmp_perfect_full_scan_ht_log_buffer_size += GetAddressBitpackSize(
+							    reinterpret_cast<data_ptr_t*>(curr_log->compressed_perfect_full_scan_ht_log.artifacts->compressed_row_locations[i]),
+							    row_locations_size, is_ascend);
 						}
 					}
 				}

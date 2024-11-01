@@ -1242,7 +1242,7 @@ struct CompressedPerfectFullScanHTArtifacts{
 
 	Compressed64List compressed_row_locations;
 	Compressed64List compressed_row_locations_size;
-	Compressed64List row_locations_is_compressed;
+	Compressed64List is_ascend;
 
 	Compressed64List key_count;
 	Compressed64List ht_count;
@@ -1277,12 +1277,25 @@ public:
 					delete[] sel_tuples_addr;
 				}
 
-				if(artifacts->row_locations_is_compressed[i] != 0){
-					unsigned char* row_locations_addr = reinterpret_cast<unsigned char*>(artifacts->compressed_row_locations[i]);
-					delete[] row_locations_addr;
-				} else {
-					data_ptr_t row_locations_addr = reinterpret_cast<data_ptr_t>(artifacts->compressed_row_locations[i]);
-					delete[] row_locations_addr;
+				idx_t compressed_row_location_size = artifacts->compressed_row_locations_size[i];
+				idx_t is_ascend_count = artifacts->is_ascend[i];
+
+				if(artifacts->compressed_row_locations[i] != 0){
+					if(compressed_row_location_size / (is_ascend_count+1) >= 16){
+						if(compressed_row_location_size <= 8){
+							delete[] reinterpret_cast<data_ptr_t*>(artifacts->compressed_row_locations[i]);
+						} else {
+							delete[] reinterpret_cast<Compressed64ListDelta**>(artifacts->compressed_row_locations[i]);
+						}
+					} else {
+						if(compressed_row_location_size < 4){
+							delete[] reinterpret_cast<data_ptr_t*>(artifacts->compressed_row_locations[i]);
+						} else {
+							Compressed64ListWithSize* compressed_list = reinterpret_cast<Compressed64ListWithSize*>(artifacts->compressed_row_locations[i]);
+							delete compressed_list;
+						}
+
+					}
 				}
 			}
 		}
@@ -1310,12 +1323,24 @@ public:
 					delete[] sel_tuples_addr;
 				}
 
-				if(artifacts->row_locations_is_compressed[i] != 0){
-					unsigned char* row_locations_addr = reinterpret_cast<unsigned char*>(artifacts->compressed_row_locations[i]);
-					delete[] row_locations_addr;
-				} else {
-					data_ptr_t row_locations_addr = reinterpret_cast<data_ptr_t>(artifacts->compressed_row_locations[i]);
-					delete[] row_locations_addr;
+				idx_t compressed_row_location_size = artifacts->compressed_row_locations_size[i];
+				idx_t is_ascend_count = artifacts->is_ascend[i];
+
+				if(artifacts->compressed_row_locations[i] != 0){
+					if(compressed_row_location_size / (is_ascend_count+1) >= 16){
+						if(compressed_row_location_size <= 8){
+							delete[] reinterpret_cast<data_ptr_t*>(artifacts->compressed_row_locations[i]);
+						} else {
+							delete[] reinterpret_cast<Compressed64ListDelta**>(artifacts->compressed_row_locations[i]);
+						}
+					} else {
+						if(compressed_row_location_size < 4){
+							delete[] reinterpret_cast<data_ptr_t*>(artifacts->compressed_row_locations[i]);
+						} else {
+							Compressed64ListWithSize* compressed_list = reinterpret_cast<Compressed64ListWithSize*>(artifacts->compressed_row_locations[i]);
+							delete compressed_list;
+						}
+					}
 				}
 			}
 		}
@@ -1326,7 +1351,7 @@ public:
 	}
 
 	void PushBack(idx_t sel_build_p, idx_t sel_tuples_p, idx_t compressed_row_locations_p,
-	              idx_t compressed_row_locations_size_p, idx_t row_locations_is_compressed_p,
+	              idx_t compressed_row_locations_size_p, idx_t is_ascend_p,
 	              idx_t key_count_p, idx_t ht_count_p, idx_t vector_buffer_size_p){
 		if (size == 0) {
 			artifacts = new CompressedPerfectFullScanHTArtifacts();
@@ -1337,7 +1362,7 @@ public:
 
 		this->artifacts->compressed_row_locations.PushBack(compressed_row_locations_p, size);
 		this->artifacts->compressed_row_locations_size.PushBack(compressed_row_locations_size_p, size);
-		this->artifacts->row_locations_is_compressed.PushBack(row_locations_is_compressed_p, size);
+		this->artifacts->is_ascend.PushBack(is_ascend_p, size);
 
 		this->artifacts->key_count.PushBack(key_count_p, size);
 		this->artifacts->ht_count.PushBack(ht_count_p, size);
@@ -1357,7 +1382,7 @@ public:
 
 			       + this->artifacts->compressed_row_locations.GetBytesSize()
 			       + this->artifacts->compressed_row_locations_size.GetBytesSize()
-			       + this->artifacts->row_locations_is_compressed.GetBytesSize()
+			       + this->artifacts->is_ascend.GetBytesSize()
 
 			       + this->artifacts->key_count.GetBytesSize()
 			       + this->artifacts->ht_count.GetBytesSize()

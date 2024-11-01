@@ -90,16 +90,35 @@ bool PerfectHashJoinExecutor::FullScanHashTable(LogicalType &key_type) {
 			sel_t* sel_build_deltabitpack = ChangeSelDataToDeltaBitpack(sel_build.sel_data()->owned_data.get(), key_count);
 			sel_t* sel_tuples_deltarle = ChangeSelDataToDeltaRLE(sel_tuples.sel_data()->owned_data.get(), key_count);
 
-			vector<idx_t> result_vector = CompressDataTArray(tuples_addresses.GetBuffer()->GetDataSize(), tuples_addresses.GetBuffer()->GetData(), CompressionMethod::ZSTD);
+//			vector<idx_t> result_vector = CompressDataTArray(tuples_addresses.GetBuffer()->GetDataSize(), tuples_addresses.GetBuffer()->GetData(), CompressionMethod::ZSTD);
+//
+//			unsigned char* compressed_data = reinterpret_cast<unsigned char*>(result_vector[0]);
+//			idx_t compressed_size = result_vector[1];
+//			idx_t is_compressed = result_vector[2];
 
-			unsigned char* compressed_data = reinterpret_cast<unsigned char*>(result_vector[0]);
-			idx_t compressed_size = result_vector[1];
-			idx_t is_compressed = result_vector[2];
+			data_ptr_t* converted_ptr = reinterpret_cast<data_ptr_t*>(tuples_addresses.GetBuffer()->GetData());
+			size_t result_count = int(tuples_addresses.GetBuffer()->GetDataSize() / 8);
+
+			size_t is_ascend_count = 0;
+			for (idx_t i = 1; i < result_count; i++) {
+				if (reinterpret_cast<idx_t>(converted_ptr[i]) < reinterpret_cast<idx_t>(converted_ptr[i - 1])) {
+					is_ascend_count++;
+				}
+			}
+
+			data_ptr_t* compressed_converted_ptr;
+			std::cout << "result_count: " << result_count << std::endl;
+			std::cout << "is_ascend_count: " << is_ascend_count << std::endl;
+			if(result_count / (is_ascend_count+1) >= 16){
+				compressed_converted_ptr = ChangeAddressToDeltaRLE(converted_ptr, result_count);
+			} else {
+				compressed_converted_ptr = ChangeAddressToBitpack(converted_ptr, result_count, is_ascend_count);
+			}
 
 			active_log->compressed_perfect_full_scan_ht_log.PushBack(reinterpret_cast<idx_t>(sel_build_deltabitpack),
 			                                                         reinterpret_cast<idx_t>(sel_tuples_deltarle),
-			                                                         reinterpret_cast<idx_t>(compressed_data),
-			                                                         compressed_size, is_compressed,
+			                                                         reinterpret_cast<idx_t>(compressed_converted_ptr),
+			                                                         result_count, is_ascend_count,
 			                                                         key_count, ht.Count(),
 			                                                         tuples_addresses.GetBuffer()->GetDataSize());
 		} else {
