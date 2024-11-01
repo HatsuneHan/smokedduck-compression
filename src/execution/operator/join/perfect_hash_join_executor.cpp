@@ -90,11 +90,6 @@ bool PerfectHashJoinExecutor::FullScanHashTable(LogicalType &key_type) {
 			sel_t* sel_build_deltabitpack = ChangeSelDataToDeltaBitpack(sel_build.sel_data()->owned_data.get(), key_count);
 			sel_t* sel_tuples_deltarle = ChangeSelDataToDeltaRLE(sel_tuples.sel_data()->owned_data.get(), key_count);
 
-//			vector<idx_t> result_vector = CompressDataTArray(tuples_addresses.GetBuffer()->GetDataSize(), tuples_addresses.GetBuffer()->GetData(), CompressionMethod::ZSTD);
-//
-//			unsigned char* compressed_data = reinterpret_cast<unsigned char*>(result_vector[0]);
-//			idx_t compressed_size = result_vector[1];
-//			idx_t is_compressed = result_vector[2];
 
 			data_ptr_t* converted_ptr = reinterpret_cast<data_ptr_t*>(tuples_addresses.GetBuffer()->GetData());
 			size_t result_count = int(tuples_addresses.GetBuffer()->GetDataSize() / 8);
@@ -107,14 +102,12 @@ bool PerfectHashJoinExecutor::FullScanHashTable(LogicalType &key_type) {
 			}
 
 			data_ptr_t* compressed_converted_ptr;
-			std::cout << "result_count: " << result_count << std::endl;
-			std::cout << "is_ascend_count: " << is_ascend_count << std::endl;
 			if(result_count / (is_ascend_count+1) >= 16){
 				compressed_converted_ptr = ChangeAddressToDeltaRLE(converted_ptr, result_count);
 			} else {
 				compressed_converted_ptr = ChangeAddressToBitpack(converted_ptr, result_count, is_ascend_count);
 			}
-
+			
 			active_log->compressed_perfect_full_scan_ht_log.PushBack(reinterpret_cast<idx_t>(sel_build_deltabitpack),
 			                                                         reinterpret_cast<idx_t>(sel_tuples_deltarle),
 			                                                         reinterpret_cast<idx_t>(compressed_converted_ptr),
