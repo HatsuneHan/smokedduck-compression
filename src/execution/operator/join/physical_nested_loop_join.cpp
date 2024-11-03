@@ -425,7 +425,7 @@ OperatorResultType PhysicalNestedLoopJoin::ResolveComplexJoin(ExecutionContext &
 			vector<idx_t> &bitmap_is_compressed = result_vector[2];
 			vector<idx_t> &use_bitmap = result_vector[3];
 
-			idx_t* compressed_rvector = ChangeSelDataToRLE(rvector.sel_data()->owned_data.get(), match_count);
+			sel_t* compressed_rvector = ChangeSelDataToRLE(rvector.sel_data()->owned_data.get(), match_count);
 
 			active_log->compressed_nlj_log.PushBack(bitmap_vector, bitmap_sizes, bitmap_is_compressed,
 			                                        bitmap_vector.size(), reinterpret_cast<idx_t>(compressed_rvector),

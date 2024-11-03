@@ -796,7 +796,7 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
 			idx_t match_count = log->compressed_nlj_log.artifacts->count[lsn];
 			idx_t right_offset = log->compressed_nlj_log.artifacts->current_row_index[lsn];
 
-			sel_t* right_addr_num = ChangeRLEToSelData(reinterpret_cast<idx_t*>(compressed_right_addr_num), match_count, right_offset);
+			sel_t* right_addr_num = ChangeRLEToSelData(reinterpret_cast<sel_t*>(compressed_right_addr_num), match_count, right_offset);
 			data_ptr_t right_ptr = reinterpret_cast<data_ptr_t>(right_addr_num);
 
 			Vector temp(LogicalType::INTEGER, right_ptr);

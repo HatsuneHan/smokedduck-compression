@@ -1302,22 +1302,22 @@ namespace duckdb {
 	}
 
 
-    idx_t* ChangeSelDataToRLE(sel_t* sel_data, idx_t key_count){
+    sel_t* ChangeSelDataToRLE(sel_t* sel_data, idx_t key_count){
 
 	    if(key_count <= 4){
 		    sel_t* sel_data_copy = new sel_t[key_count];
 		    std::copy(sel_data, sel_data + key_count, sel_data_copy);
-		    return reinterpret_cast<idx_t*>(sel_data_copy);
+		    return reinterpret_cast<sel_t*>(sel_data_copy);
 	    }
 
-	    vector<idx_t> rle_vector;
+	    vector<sel_t> rle_vector;
 
 	    // we should store the first element
-	    idx_t prev_val = sel_data[0];
-	    idx_t curr_rle = 1;
+	    sel_t prev_val = sel_data[0];
+	    sel_t curr_rle = 1;
 
 	    for(size_t i = 1; i < key_count; i++) {
-		    idx_t curr_val = sel_data[i];
+		    sel_t curr_val = sel_data[i];
 
 		    if (curr_val == prev_val) {
 			    curr_rle++;
@@ -1333,13 +1333,13 @@ namespace duckdb {
 	    rle_vector.push_back(prev_val);
 	    rle_vector.push_back(curr_rle);
 
-	    idx_t *rle = new idx_t[rle_vector.size()];
+	    sel_t *rle = new sel_t[rle_vector.size()];
 	    std::copy(rle_vector.begin(), rle_vector.end(), rle);
 
 	    return rle;
     }
 
-    sel_t* ChangeRLEToSelData(idx_t* rle, idx_t key_count, idx_t offset) {
+    sel_t* ChangeRLEToSelData(sel_t* rle, idx_t key_count, idx_t offset) {
 
 	    if (key_count <= 4) {
 		    sel_t* rle_sel = reinterpret_cast<sel_t *>(rle);
@@ -1351,11 +1351,11 @@ namespace duckdb {
 
 	    sel_t *sel_data = new sel_t[key_count];
 
-	    idx_t index = 0;
-	    idx_t rle_index = 0;
+	    sel_t index = 0;
+	    sel_t rle_index = 0;
 
 	    while (index < key_count) {
-		    idx_t rle_num = rle[rle_index + 1];
+		    sel_t rle_num = rle[rle_index + 1];
 
 		    for (size_t i = 0; i < rle_num; i++) {
 			    sel_data[index] = rle[rle_index] + offset;
@@ -1368,22 +1368,22 @@ namespace duckdb {
 	    return sel_data;
     }
 
-    size_t GetRLESize(idx_t* rle, idx_t key_count) {
+    size_t GetRLESize(sel_t* rle, idx_t key_count) {
 
 	    if (key_count <= 4) {
 		    return sizeof(sel_t) * key_count;
 	    }
 
-	    idx_t index = 0;
-	    idx_t rle_index = 0;
+	    sel_t index = 0;
+	    sel_t rle_index = 0;
 
 	    while (index < key_count) {
-		    idx_t rle_num = rle[rle_index + 1];
+		    sel_t rle_num = rle[rle_index + 1];
 		    index += rle_num;
 		    rle_index += 2;
 	    }
 
-	    return sizeof(idx_t) * rle_index;
+	    return sizeof(sel_t) * rle_index;
 	}
 
 }

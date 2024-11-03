@@ -1174,7 +1174,7 @@ size_t LineageManager::GetCompressedArtifactSize(std::unordered_map<string, size
 
 				for(size_t i = 0; i < curr_log->compressed_nlj_log.size; i++){
 					if(curr_log->compressed_nlj_log.artifacts->right[i] != 0){
-						tmp_nlj_log_buffer_size += GetRLESize(reinterpret_cast<idx_t*>(curr_log->compressed_nlj_log.artifacts->right[i]),
+						tmp_nlj_log_buffer_size += GetRLESize(reinterpret_cast<sel_t*>(curr_log->compressed_nlj_log.artifacts->right[i]),
 						                                      curr_log->compressed_nlj_log.artifacts->count[i]);
 					}
 				}

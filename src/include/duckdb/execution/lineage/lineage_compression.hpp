@@ -76,9 +76,9 @@ data_ptr_t* ChangeAddressToDeltaRLE(data_ptr_t*, idx_t);
 data_ptr_t* ChangeDeltaRLEToAddress(data_ptr_t*, idx_t);
 size_t GetAddressDeltaRLESize(data_ptr_t*, idx_t);
 
-idx_t* ChangeSelDataToRLE(sel_t*, idx_t);
-sel_t* ChangeRLEToSelData(idx_t*, idx_t, idx_t);
-size_t GetRLESize(idx_t*, idx_t);
+sel_t* ChangeSelDataToRLE(sel_t*, idx_t);
+sel_t* ChangeRLEToSelData(sel_t*, idx_t, idx_t);
+size_t GetRLESize(sel_t*, idx_t);
 
 // use to replace vector<idx_t>
 
@@ -1628,13 +1628,8 @@ public:
 			}
 
 			for (size_t i = 0; i < size; i++) {
-				if(artifacts->count[i] <= 4){
-					sel_t* right_addr = reinterpret_cast<sel_t*>(artifacts->right[i]);
-					delete[] right_addr;
-				} else {
-					idx_t* right_addr = reinterpret_cast<idx_t*>(artifacts->right[i]);
-					delete[] right_addr;
-				}
+				sel_t* right_addr = reinterpret_cast<sel_t*>(artifacts->right[i]);
+				delete[] right_addr;
 			}
 		}
 
@@ -1672,13 +1667,8 @@ public:
 			}
 
 			for (size_t i = 0; i < size; i++) {
-				if(artifacts->count[i] <= 4){
-					sel_t* right_addr = reinterpret_cast<sel_t*>(artifacts->right[i]);
-					delete[] right_addr;
-				} else {
-					idx_t* right_addr = reinterpret_cast<idx_t*>(artifacts->right[i]);
-					delete[] right_addr;
-				}
+				sel_t* right_addr = reinterpret_cast<sel_t*>(artifacts->right[i]);
+				delete[] right_addr;
 			}
 		}
 
