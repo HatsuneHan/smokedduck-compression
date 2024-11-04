@@ -474,7 +474,7 @@ public:
 
 struct CompressedAddressArtifacts{
 	Compressed64List addresses;
-	Compressed64List is_ascend;
+	Compressed64List use_rle;
 
 	Compressed64List count;
 };
@@ -489,60 +489,81 @@ public:
 	~CompressedAddressArtifactList() {
 
 		for (size_t i = 0; i < size; i++) {
-			if((artifacts->count[i] / (artifacts->is_ascend[i]+1)) >= 16){
-				if(artifacts->count[i] <= 8){
-					data_ptr_t* addresses_addr = reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
-					delete[] addresses_addr;
-				} else {
-					Compressed64ListDelta** compressed_delta_list = reinterpret_cast<Compressed64ListDelta**>(artifacts->addresses[i]);
-					delete[] compressed_delta_list;
+			data_ptr_t* compressed_rhs_addr = reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
+			idx_t use_rle = artifacts->use_rle[i];
+			idx_t count = artifacts->count[i];
+
+			if(use_rle){
+				if(use_rle == 1){
+					Compressed64ListWithSize** compressed_list = reinterpret_cast<Compressed64ListWithSize**>(compressed_rhs_addr);
+					delete compressed_list[0];
+					delete compressed_list[1];
+					delete[] compressed_list;
+
+				} else if (use_rle == 2){
+					idx_t** rhs_addr = reinterpret_cast<idx_t**>(compressed_rhs_addr);
+					delete[] rhs_addr[0];
+					delete[] reinterpret_cast<uint16_t*>(rhs_addr[1]);
+					delete[] rhs_addr;
 				}
-			} else {
-				if(artifacts->count[i] < 4){
-					data_ptr_t* addresses_addr = reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
-					delete[] addresses_addr;
-				} else {
-					Compressed64ListWithSize* compressed_list = reinterpret_cast<Compressed64ListWithSize*>(artifacts->addresses[i]);
-					delete compressed_list;
-				}
+
+				continue;
 			}
+
+			if(count <= 8){
+				delete[] compressed_rhs_addr;
+				continue;
+			}
+
+			Compressed64ListWithSize* compressed_list = reinterpret_cast<Compressed64ListWithSize*>(compressed_rhs_addr);
+			delete compressed_list;
 		}
 		delete artifacts;
-
 	}
 
 	void Clear(){
 		for (size_t i = 0; i < size; i++) {
-			if((artifacts->count[i] / (artifacts->is_ascend[i]+1)) >= 16){
-				if(artifacts->count[i] <= 8){
-					data_ptr_t* addresses_addr = reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
-					delete[] addresses_addr;
-				} else {
-					Compressed64ListDelta** compressed_delta_list = reinterpret_cast<Compressed64ListDelta**>(artifacts->addresses[i]);
-					delete[] compressed_delta_list;
+			data_ptr_t* compressed_rhs_addr = reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
+			idx_t use_rle = artifacts->use_rle[i];
+			idx_t count = artifacts->count[i];
+
+			if(use_rle){
+				if(use_rle == 1){
+					Compressed64ListWithSize** compressed_list = reinterpret_cast<Compressed64ListWithSize**>(compressed_rhs_addr);
+					delete compressed_list[0];
+					delete compressed_list[1];
+					delete[] compressed_list;
+
+				} else if (use_rle == 2){
+					idx_t** rhs_addr = reinterpret_cast<idx_t**>(compressed_rhs_addr);
+					delete[] rhs_addr[0];
+					delete[] reinterpret_cast<uint16_t*>(rhs_addr[1]);
+					delete[] rhs_addr;
 				}
-			} else {
-				if(artifacts->count[i] < 4){
-					data_ptr_t* addresses_addr = reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
-					delete[] addresses_addr;
-				} else {
-					Compressed64ListWithSize* compressed_list = reinterpret_cast<Compressed64ListWithSize*>(artifacts->addresses[i]);
-					delete compressed_list;
-				}
+
+				continue;
 			}
+
+			if(count <= 8){
+				delete[] compressed_rhs_addr;
+				continue;
+			}
+
+			Compressed64ListWithSize* compressed_list = reinterpret_cast<Compressed64ListWithSize*>(compressed_rhs_addr);
+			delete compressed_list;
 		}
 		delete artifacts;
 		artifacts = nullptr;
 		size = 0;
 	}
 
-	void PushBack(idx_t addresses_p, idx_t is_ascend, idx_t count_p){
+	void PushBack(idx_t addresses_p, idx_t use_rle_p, idx_t count_p){
 		if (size == 0) {
 			artifacts = new CompressedAddressArtifacts();
 		}
 
 		this->artifacts->addresses.PushBack(addresses_p, size);
-		this->artifacts->is_ascend.PushBack(is_ascend, size);
+		this->artifacts->use_rle.PushBack(use_rle_p, size);
 		this->artifacts->count.PushBack(count_p, size);
 
 		size++;
@@ -554,7 +575,7 @@ public:
 			return 0;
 		} else {
 			return this->artifacts->addresses.GetBytesSize()
-			       + this->artifacts->is_ascend.GetBytesSize()
+			       + this->artifacts->use_rle.GetBytesSize()
 			       + this->artifacts->count.GetBytesSize();
 //			       + sizeof(CompressedAddressArtifactList);
 		}

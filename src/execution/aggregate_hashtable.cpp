@@ -254,39 +254,9 @@ idx_t GroupedAggregateHashTable::AddChunk(DataChunk &groups, Vector &group_hashe
   if (lineage_manager->capture && active_log) {
 	  	auto ptrs = FlatVector::GetData<data_ptr_t>(state.addresses);
 		if (lineage_manager->compress){
-
-			idx_t is_ascend_count = 0;
-			for (idx_t i = 1; i < groups.size(); i++) {
-				if (reinterpret_cast<idx_t>(ptrs[i]) < reinterpret_cast<idx_t>(ptrs[i - 1])) {
-					is_ascend_count++;
-				}
-			}
-
-			data_ptr_t* addresses_compressed;
-			if(groups.size() / (is_ascend_count+1) >= 16){
-				addresses_compressed = ChangeAddressToDeltaRLE(ptrs, groups.size());
-			} else {
-				addresses_compressed = ChangeAddressToBitpack(ptrs, groups.size(), is_ascend_count);
-			}
-
-//			//
-//			size_t deltarle_size;
-//			if (groups.size() / (is_ascend_count+1) >= 16){
-//				deltarle_size = GetAddressDeltaRLESize(addresses_compressed, groups.size());
-//			} else {
-//				deltarle_size = GetAddressBitpackSize(addresses_compressed, groups.size(), is_ascend_count);
-//			}
-//
-//			idx_t use_rle = GetUseRle(ptrs, groups.size());
-//			data_ptr_t* addresses_compressed_rle = ChangeAddressToRLEBitpack(ptrs, groups.size(), use_rle);
-//
-//			size_t rle_size = GetAddressRLEBitpackSize(addresses_compressed_rle, groups.size(), use_rle);
-//
-//			std::cout << "Count: " << groups.size() << " is_ascend_count: " << is_ascend_count << " use_rle: " << use_rle << std::endl;
-//			std::cout << "deltarle_size: " << deltarle_size << " rle_size: " << rle_size << std::endl;
-
-
-			active_log->compressed_scatter_log.PushBack(reinterpret_cast<idx_t>(addresses_compressed), static_cast<idx_t>(is_ascend_count), groups.size());
+			idx_t use_rle = GetUseRle(ptrs, groups.size());
+			data_ptr_t* addresses_compressed = ChangeAddressToRLEBitpack(ptrs, groups.size(), use_rle);
+			active_log->compressed_scatter_log.PushBack(reinterpret_cast<idx_t>(addresses_compressed), static_cast<idx_t>(use_rle), groups.size());
 
 		} else {
 			unique_ptr<data_ptr_t[]> addresses_copy(new data_ptr_t[groups.size()]);

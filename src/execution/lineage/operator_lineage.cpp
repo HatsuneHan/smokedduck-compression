@@ -899,13 +899,9 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
 			}
 			count = log->compressed_scatter_log.artifacts->count[data_idx];
 			data_ptr_t* compressed_payload = reinterpret_cast<data_ptr_t*>(log->compressed_scatter_log.artifacts->addresses[data_idx]);
-			idx_t is_ascend_count = log->compressed_scatter_log.artifacts->is_ascend[data_idx];
+			idx_t use_rle = log->compressed_scatter_log.artifacts->use_rle[data_idx];
 
-			if(count / (is_ascend_count+1) >= 16){
-				payload = ChangeDeltaRLEToAddress(compressed_payload, count);
-			} else {
-				payload = ChangeBitpackToAddress(compressed_payload, count, is_ascend_count);
-			}
+			payload = ChangeRLEBitpackToAddress(compressed_payload, count, use_rle);
 
 			chunk.SetCardinality(count);
 			chunk.data[1].Initialize(false, count);
@@ -917,7 +913,7 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
 			chunk.data[2].Reference(thread_id_vec);
 			chunk.data[3].Reference(thread_id_vec);
 
-			if(((count / (is_ascend_count+1) >= 16) && count > 8) || ((count / (is_ascend_count+1) < 16) && count >= 4)){
+			if(use_rle || (use_rle == 0 && count > 8)){
 				delete[] payload;
 			}
 
