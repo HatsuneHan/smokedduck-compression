@@ -900,7 +900,26 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
 			count = log->compressed_scatter_log.artifacts->count[data_idx];
 			data_ptr_t* compressed_payload = reinterpret_cast<data_ptr_t*>(log->compressed_scatter_log.artifacts->addresses[data_idx]);
 			idx_t is_ascend_count = log->compressed_scatter_log.artifacts->is_ascend[data_idx];
-			payload = ChangeBitpackToAddress(compressed_payload, count, is_ascend_count);
+
+			if(count / (is_ascend_count+1) >= 16){
+				payload = ChangeDeltaRLEToAddress(compressed_payload, count);
+			} else {
+				payload = ChangeBitpackToAddress(compressed_payload, count, is_ascend_count);
+			}
+
+			chunk.SetCardinality(count);
+			chunk.data[1].Initialize(false, count);
+			int* out_index_ptr = (int*)chunk.data[1].GetData();
+			for (idx_t j=0; j < count; ++j) {
+				out_index_ptr[j] = (int)log_index->codes[ payload[j] ];
+			}
+			chunk.data[0].Sequence(global_count, 1, count); // in_index
+			chunk.data[2].Reference(thread_id_vec);
+			chunk.data[3].Reference(thread_id_vec);
+
+			if(((count / (is_ascend_count+1) >= 16) && count > 8) || ((count / (is_ascend_count+1) < 16) && count >= 4)){
+				delete[] payload;
+			}
 
 		} else {
 			if (data_idx >= log->scatter_log.size()){
@@ -908,22 +927,16 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
 			}
 			count = log->scatter_log[data_idx].count;
 			payload = log->scatter_log[data_idx].addresses.get();
-		}
 
-		chunk.SetCardinality(count);
-		chunk.data[1].Initialize(false, count);
-		int* out_index_ptr = (int*)chunk.data[1].GetData();
-		for (idx_t j=0; j < count; ++j) {
-			out_index_ptr[j] = (int)log_index->codes[ payload[j] ];
-		}
-		chunk.data[0].Sequence(global_count, 1, count); // in_index
-		chunk.data[2].Reference(thread_id_vec);
-		chunk.data[3].Reference(thread_id_vec);
-
-		if(lineage_manager->compress){
-			if(count >= 4){
-				delete[] payload;
+			chunk.SetCardinality(count);
+			chunk.data[1].Initialize(false, count);
+			int* out_index_ptr = (int*)chunk.data[1].GetData();
+			for (idx_t j=0; j < count; ++j) {
+				out_index_ptr[j] = (int)log_index->codes[ payload[j] ];
 			}
+			chunk.data[0].Sequence(global_count, 1, count); // in_index
+			chunk.data[2].Reference(thread_id_vec);
+			chunk.data[3].Reference(thread_id_vec);
 		}
 
 		break;

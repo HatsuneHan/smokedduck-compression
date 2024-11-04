@@ -152,6 +152,25 @@ void PerfectAggregateHashTable::AddChunk(DataChunk &groups, DataChunk &payload) 
 
 			data_ptr_t* addresses_compressed = ChangeAddressToBitpack(ptrs, groups.size(), is_ascend_count);
 
+//			//
+//			data_ptr_t* addresses_compressed_deltarle;
+//			if(groups.size() / (is_ascend_count+1) >= 4){
+//				addresses_compressed_deltarle = ChangeAddressToRLEBitpack(ptrs, groups.size());
+//			} else {
+//				addresses_compressed_deltarle = ChangeAddressToBitpack(ptrs, groups.size(), is_ascend_count);
+//			}
+//
+//			size_t deltabitpack_size = GetAddressBitpackSize(addresses_compressed, groups.size(), is_ascend_count);
+//			size_t deltarle_size;
+//			if(groups.size() / (is_ascend_count+1) >= 4){
+//				deltarle_size = GetAddressDeltaRLESize(addresses_compressed_deltarle, groups.size());
+//			} else {
+//				deltarle_size = GetAddressBitpackSize(addresses_compressed_deltarle, groups.size(), is_ascend_count);
+//			}
+//			std::cout << "Count: " << groups.size() << " is_ascend_count: " << is_ascend_count << std::endl;
+//			std::cout << "Bitpack size: " << deltabitpack_size << " DeltaRLE size: " << deltarle_size << std::endl;
+//			//
+
 			active_log->compressed_scatter_log.PushBack(reinterpret_cast<idx_t>(addresses_compressed), static_cast<idx_t>(is_ascend_count), groups.size());
 
 		} else {

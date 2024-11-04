@@ -489,15 +489,22 @@ public:
 	~CompressedAddressArtifactList() {
 
 		for (size_t i = 0; i < size; i++) {
-			if(artifacts->count[i] < 4){
-				data_ptr_t* addresses_addr = reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
-				delete[] addresses_addr;
-			} else if((artifacts->count[i] / (artifacts->is_ascend[i]+1)) >= 16){
-				Compressed64ListDelta** compressed_delta_list = reinterpret_cast<Compressed64ListDelta**>(artifacts->addresses[i]);
-				delete[] compressed_delta_list;
+			if((artifacts->count[i] / (artifacts->is_ascend[i]+1)) >= 16){
+				if(artifacts->count[i] <= 8){
+					data_ptr_t* addresses_addr = reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
+					delete[] addresses_addr;
+				} else {
+					Compressed64ListDelta** compressed_delta_list = reinterpret_cast<Compressed64ListDelta**>(artifacts->addresses[i]);
+					delete[] compressed_delta_list;
+				}
 			} else {
-				Compressed64ListWithSize* compressed_list = reinterpret_cast<Compressed64ListWithSize*>(artifacts->addresses[i]);
-				delete compressed_list;
+				if(artifacts->count[i] < 4){
+					data_ptr_t* addresses_addr = reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
+					delete[] addresses_addr;
+				} else {
+					Compressed64ListWithSize* compressed_list = reinterpret_cast<Compressed64ListWithSize*>(artifacts->addresses[i]);
+					delete compressed_list;
+				}
 			}
 		}
 		delete artifacts;
@@ -506,15 +513,22 @@ public:
 
 	void Clear(){
 		for (size_t i = 0; i < size; i++) {
-			if(artifacts->count[i] < 4){
-				data_ptr_t* addresses_addr = reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
-				delete[] addresses_addr;
-			} else if((artifacts->count[i] / (artifacts->is_ascend[i]+1)) >= 16){
-				Compressed64ListDelta** compressed_delta_list = reinterpret_cast<Compressed64ListDelta**>(artifacts->addresses[i]);
-				delete[] compressed_delta_list;
+			if((artifacts->count[i] / (artifacts->is_ascend[i]+1)) >= 16){
+				if(artifacts->count[i] <= 8){
+					data_ptr_t* addresses_addr = reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
+					delete[] addresses_addr;
+				} else {
+					Compressed64ListDelta** compressed_delta_list = reinterpret_cast<Compressed64ListDelta**>(artifacts->addresses[i]);
+					delete[] compressed_delta_list;
+				}
 			} else {
-				Compressed64ListWithSize* compressed_list = reinterpret_cast<Compressed64ListWithSize*>(artifacts->addresses[i]);
-				delete compressed_list;
+				if(artifacts->count[i] < 4){
+					data_ptr_t* addresses_addr = reinterpret_cast<data_ptr_t*>(artifacts->addresses[i]);
+					delete[] addresses_addr;
+				} else {
+					Compressed64ListWithSize* compressed_list = reinterpret_cast<Compressed64ListWithSize*>(artifacts->addresses[i]);
+					delete compressed_list;
+				}
 			}
 		}
 		delete artifacts;
