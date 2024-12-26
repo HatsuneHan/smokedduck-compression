@@ -133,32 +133,49 @@ for th_id in threads_list:
         
         key_list = plan_output.keys()
         key_type_list = [re.findall(r'[A-Za-z_]+', k)[0] for k in key_list]
-        df_from_dicts = pd.DataFrame({
-            'qid': i,
-            'phy_op_id': key_list,
-            'phy_op_type': key_type_list,
-            'lineage_size': [physical_op_size[int(re.findall(r'\d+', k)[0])] for k in key_list],
-            'output_size': [plan_output[k] for k in key_list],
-            'left_input_size': [plan_input_left[k] for k in key_list],
-            'right_input_size': [plan_input_right[k] for k in key_list],
-            'plan_timings': [plan_timings[k] for k in key_list]   
-        })  
+
+        if args.lineage:
+            df_from_dicts = pd.DataFrame({
+                'qid': i,
+                'phy_op_id': key_list,
+                'phy_op_type': key_type_list,
+                'lineage_size': [physical_op_size[int(re.findall(r'\d+', k)[0])] for k in key_list],
+                'output_size': [plan_output[k] for k in key_list],
+                'left_input_size': [plan_input_left[k] for k in key_list],
+                'right_input_size': [plan_input_right[k] for k in key_list],
+                'plan_timings': [plan_timings[k] for k in key_list]   
+            })  
+        else:
+            df_from_dicts = pd.DataFrame({
+                'qid': i,
+                'phy_op_id': key_list,
+                'phy_op_type': key_type_list,
+                # 'lineage_size': [physical_op_size[int(re.findall(r'\d+', k)[0])] for k in key_list],
+                'output_size': [plan_output[k] for k in key_list],
+                'left_input_size': [plan_input_left[k] for k in key_list],
+                'right_input_size': [plan_input_right[k] for k in key_list],
+                'plan_timings': [plan_timings[k] for k in key_list]   
+            })  
 
         all_dfs.append(df_from_dicts)
 
     final_df = pd.concat(all_dfs, ignore_index=True)
     if args.compress_lineage:
         final_df.to_csv(f'physical_operator_stats_{sf}_{th_id}_compressed.csv', index=False)
-    else:
+    elif args.lineage:
         final_df.to_csv(f'physical_operator_stats_{sf}_{th_id}_uncompressed.csv', index=False)
+    else:
+        final_df.to_csv(f'physical_operator_stats_{sf}_{th_id}_nolineage.csv', index=False)
 
 
 print("average", size_avg/22.0)
 if args.save_csv:
     if args.compress_lineage:
         filename="tpch_benchmark_capture_{}_compress_{}_test.csv".format(args.notes, args.sf)
-    else:
+    elif args.lineage:
         filename="tpch_benchmark_capture_{}_{}_test.csv".format(args.notes, args.sf)
+    else:
+        filename="tpch_benchmark_capture_{}_nolineage_{}_test.csv".format(args.notes, args.sf)
         
     print(filename)
     header = ["query", "runtime", "sf", "repeat", "lineage_type", "n_threads", "output", "stats", "notes", "plan_timings"]

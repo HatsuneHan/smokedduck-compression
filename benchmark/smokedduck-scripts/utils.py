@@ -162,11 +162,16 @@ def parse_plan_cardinality(qid):
 
 def getStats(con, q):
     print(q)
-    q_list = "select * from duckdb_queries_list() where query = ? order by query_id desc limit 1"
+    info_query = "create table if not exists duckdb_queries_info as select * from duckdb_queries_list();"
+    con.execute(info_query)
+
+    q_list = "select * from duckdb_queries_info where query = ? order by query_id desc limit 1;"
     query_info = con.execute(q_list, [q]).fetchdf()
     print(query_info)
+
     n = len(query_info)-1
     print("Query info: ", query_info.loc[n])
+    
     query_id = query_info.loc[n, 'query_id']
     lineage_size = query_info.loc[n, 'size_bytes_max']
     lineage_size = lineage_size/(1024*1024)
@@ -174,11 +179,8 @@ def getStats(con, q):
     nchunks = query_info.loc[n, 'nchunks']
     postprocess_time = query_info.loc[n, 'postprocess_time']
     plan = query_info.loc[n, 'plan']
-
-    print("physical op size is:")
-    
     physical_op_size = query_info.loc[n, 'physical_op_size']
-
+    
     return lineage_size, lineage_count, nchunks, postprocess_time, plan, physical_op_size
 
 def execute(Q, con, args):

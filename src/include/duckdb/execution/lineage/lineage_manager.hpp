@@ -63,11 +63,12 @@ public:
 		global_logger.clear();
 		operators_ids.clear();
 		physical_lname_relations.clear();
+//		lop_queryid_map.clear();
 	}
 
-	size_t GetUncompressedArtifactSize(std::unordered_map<string, size_t>&, int&);
+	size_t GetUncompressedArtifactSize(std::unordered_map<string, size_t>&, int&, idx_t&);
 
-	size_t GetCompressedArtifactSize(std::unordered_map<string, size_t>&, int&);
+	size_t GetCompressedArtifactSize(std::unordered_map<string, size_t>&, int&, idx_t&);
 
 public:
   bool capture;
@@ -75,6 +76,8 @@ public:
 	bool compress;
   int physical_id_cnt;
   std::unordered_map<void*, shared_ptr<OperatorLineage>> global_logger;
+
+  std::unordered_map<OperatorLineage*, size_t> lop_queryid_map;
   std::unordered_map<void*, int> operators_ids;
 
   std::unordered_map<int, string> physical_lname_relations;
