@@ -70,7 +70,9 @@ OperatorResultType PhysicalFilter::ExecuteInternal(ExecutionContext &context, Da
 		chunk.Reference(input);
 	} else {
 #ifdef LINEAGE
-		if (lineage_manager->capture && active_log && result_count) {
+		if (lineage_manager->capture && active_log && result_count
+		    && active_lop->mapping_recycler_node == nullptr) {
+
 			if (lineage_manager->compress) {
 
 				vector<vector<idx_t>> result_vector = ChangeSelToBitMap(state.sel.data(), result_count, CompressionMethod::LZ4);

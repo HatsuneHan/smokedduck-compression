@@ -87,6 +87,8 @@ public:
   std::vector<string> query_to_id;
   std::unordered_map<idx_t, shared_ptr<OperatorLineage>> queryid_to_plan;
   std::mutex glock;
+
+  shared_ptr<RecyclerGraph> recycler_graph;
 };
 
 } // namespace duckdb

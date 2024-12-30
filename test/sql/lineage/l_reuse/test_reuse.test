@@ -1,0 +1,39 @@
+# name: test/sql/lineage/l_reuse/test_reuse.test
+# description: Test Reuse Lineage
+# group: [l_reuse]
+
+statement ok
+PRAGMA explain_output = PHYSICAL_ONLY;
+
+statement ok
+CREATE TABLE group_table (id INTEGER PRIMARY KEY, fcol INTEGER);
+
+statement ok
+INSERT INTO group_table (id, fcol)
+SELECT series.generate_series, FLOOR(1 + RANDOM() * 100)
+FROM generate_series(1, 10000) AS series;
+
+statement ok
+PRAGMA disable_optimizer;
+PRAGMA enable_lineage;
+PRAGMA persist_lineage;
+PRAGMA compress_lineage;
+
+
+statement ok
+SELECT * FROM group_table WHERE fcol >= 50;
+
+statement ok
+SELECT AVG(id) FROM group_table WHERE fcol >= 50 GROUP BY fcol;
+
+query III
+SELECT * FROM LINEAGE_3_FILTER_1
+EXCEPT
+SELECT * FROM LINEAGE_4_FILTER_1;
+----
+
+query III
+SELECT * FROM LINEAGE_4_FILTER_1
+EXCEPT
+SELECT * FROM LINEAGE_3_FILTER_1;
+----

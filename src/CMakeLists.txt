@@ -94,7 +94,8 @@ else()
       duckdb_mbedtls
       duckdb_yyjson)
 
-  add_library(duckdb SHARED ${ALL_OBJECT_FILES})
+  add_library(duckdb SHARED ${ALL_OBJECT_FILES}
+          execution/lineage/lineage_reuse.cpp)
   target_link_libraries(duckdb ${DUCKDB_LINK_LIBS})
   link_threads(duckdb)
   link_extension_libraries(duckdb)

@@ -22,7 +22,8 @@ enum class PhysicalOperatorType : uint8_t {
 	STREAMING_LIMIT,
 	LIMIT_PERCENT,
 #ifdef LINEAGE
-  LINEAGE_SCAN,
+    LINEAGE_SCAN,
+	RECYCLER_ROOT,
 #endif
 	TOP_N,
 	WINDOW,

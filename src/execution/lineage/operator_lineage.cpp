@@ -5,7 +5,7 @@
 namespace duckdb {
 
 void OperatorLineage::PostProcess() {
-	if (processed){
+	if (processed || active_lop->mapping_recycler_node != nullptr) {
 		return;
 	}
 	thread_vec.reserve(log.size());
@@ -978,6 +978,56 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
 	}
 
 	return chunk.size();
+}
+
+
+bool OperatorLineage::Matches(const shared_ptr<RecyclerNode>& rnode){
+	// check if the lineage operator is nullptr
+	if(rnode == nullptr){
+		return false;
+	}
+
+	// check basic information
+	if(this->type != rnode->GetType() || this->name != rnode->GetName() ||
+	    this->table_name != rnode->GetTableName() || this->extra != rnode->GetExtra() ||
+	    this->children.size() != rnode->GetChildren().size()){
+		return false;
+	}
+
+	// check children
+	switch(this->children.size()){
+	case 0: {
+		return true;
+	}
+
+	case 1: {
+		bool matchcase = this->children[0]->Matches(rnode->GetChildren()[0]);
+		if(matchcase){
+			return true;
+		}
+
+		return false;
+
+	}
+
+	case 2: {
+		bool matchcase_forward = this->children[0]->Matches(rnode->GetChildren()[0]) &&
+				this->children[1]->Matches(rnode->GetChildren()[1]);
+		bool matchcase_reverse = this->children[0]->Matches(rnode->GetChildren()[1]) &&
+		                         this->children[1]->Matches(rnode->GetChildren()[0]);
+
+		if(matchcase_forward || matchcase_reverse){
+			return true;
+		}
+
+		return false;
+	}
+
+	default: {
+		throw std::runtime_error("OperatorLineage::Matches: Children size is illegal.");
+	}
+	}
+
 }
 
 } // namespace duckdb

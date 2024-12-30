@@ -13,15 +13,18 @@
 #include "duckdb/common/common.hpp"
 #include "duckdb/common/unordered_map.hpp"
 #include "duckdb/parser/column_definition.hpp"
+#include "duckdb/common/enums/physical_operator_type.hpp"
 #include <iostream>
 #include <mutex>
+
+#include "lineage_reuse.hpp"
 
 namespace duckdb {
 
 enum class PhysicalOperatorType : uint8_t;
 
 class OperatorLineage;
-
+class RecyclerNode;
 
 //! OperatorLineage
 /*!
@@ -44,6 +47,8 @@ public:
 
 	void PostProcess();
 
+	bool Matches(const shared_ptr<RecyclerNode>&);
+
 public:
   int operator_id;
   bool processed;
@@ -61,6 +66,8 @@ public:
 
   size_t lineage_input_sizes;
   size_t lineage_output_sizes;
+
+  shared_ptr<RecyclerNode> mapping_recycler_node;
 
 };
 
