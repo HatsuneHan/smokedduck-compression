@@ -92,8 +92,7 @@ void RecyclerGraph::AddQuery(const shared_ptr<OperatorLineage>& lineage_plan){
 }
 
 bool RecyclerGraph::MatchTree(const shared_ptr<OperatorLineage>& lineage_plan) {
-	if (!lineage_plan || lineage_plan->type == PhysicalOperatorType::PRAGMA
-	    || lineage_plan->type == PhysicalOperatorType::LINEAGE_SCAN) {
+	if (!lineage_plan) {
 		return false;
 	}
 
@@ -104,7 +103,7 @@ bool RecyclerGraph::MatchTree(const shared_ptr<OperatorLineage>& lineage_plan) {
 	}
 
 	// set the mapping_recycler_node as far as possible for each operator in the lineage plan
-	if(lineage_plan->type == PhysicalOperatorType::TABLE_SCAN){
+	if(lineage_plan->children.empty()){
 		for(const shared_ptr<RecyclerNode>& leaf_node: root->GetLeafNodes()){
 			if(lineage_plan->Matches(leaf_node)){
 				lineage_plan->mapping_recycler_node = leaf_node;
