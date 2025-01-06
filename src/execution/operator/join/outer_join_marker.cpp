@@ -64,7 +64,7 @@ void OuterJoinMarker::ConstructLeftJoinResult(DataChunk &left, DataChunk &result
 			ConstantVector::SetNull(result.data[idx], true);
 		}
 #ifdef LINEAGE
-    if (lineage_manager->capture && active_log) {
+    if (lineage_manager->capture && active_log && active_lop->mapping_recycler_node == nullptr) {
       if(lineage_manager->compress){
 
 		  vector<vector<idx_t>> result_vector = ChangeSelToBitMap(remaining_sel.sel_data()->owned_data.get(), remaining_count, CompressionMethod::LZ4);

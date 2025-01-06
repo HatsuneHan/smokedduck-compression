@@ -308,7 +308,9 @@ void LocalSortState::ReOrder(SortedData &sd, data_ptr_t sorting_ptr, RowDataColl
 	const idx_t sorting_entry_size = gstate.sort_layout.entry_size;
 #ifdef LINEAGE
 	if(lineage_manager->compress){
-		if (lineage_manager->capture && active_log && active_log->compressed_reorder_log.empty()) {
+		if (lineage_manager->capture && active_log && active_log->compressed_reorder_log.empty()
+		    && active_lop->mapping_recycler_node == nullptr) {
+
 			active_log->compressed_reorder_log.emplace_back();
 			CompressedReorderLogArtifactList &cur_lineage = active_log->compressed_reorder_log.back();
 
@@ -328,7 +330,9 @@ void LocalSortState::ReOrder(SortedData &sd, data_ptr_t sorting_ptr, RowDataColl
 			}
 		}
 	} else {
-		if (lineage_manager->capture && active_log && active_log->reorder_log.empty()) {
+		if (lineage_manager->capture && active_log && active_log->reorder_log.empty()
+		    && active_lop->mapping_recycler_node == nullptr) {
+
 			active_log->reorder_log.emplace_back();
 			vector<idx_t> &cur_lineage = active_log->reorder_log.back();
 			cur_lineage.resize(count);

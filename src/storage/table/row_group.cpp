@@ -507,7 +507,7 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 				}
 			}
 #ifdef LINEAGE
-			if (lineage_manager->capture && active_log) {
+			if (lineage_manager->capture && active_log && active_lop->mapping_recycler_node == nullptr) {
 				if (lineage_manager->compress){
 					vector<idx_t> empty_vector;
 					vector<idx_t> empty_vector_idx_t;
@@ -566,7 +566,7 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 				continue;
 			}
 #ifdef LINEAGE
-			if (lineage_manager->capture && active_log) {
+			if (lineage_manager->capture && active_log && active_lop->mapping_recycler_node == nullptr) {
 				if(lineage_manager->compress){
 					vector<vector<idx_t>> result_vector = ChangeSelToBitMap(sel.data(), approved_tuple_count, CompressionMethod::LZ4);
 

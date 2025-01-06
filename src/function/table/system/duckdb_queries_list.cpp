@@ -164,6 +164,7 @@ void DuckDBQueriesListFunction(ClientContext &context, TableFunctionInput &data_
 			stats[0] = uncompressed_total_size;
 		}
 
+
 		vector<Value> lop_size_list(physical_op_num, 0);
 		for (const auto& pair : lop_size){
 			int physical_op_id = extractOperatorID(pair.first);

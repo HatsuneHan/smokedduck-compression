@@ -554,7 +554,7 @@ void TupleDataCollection::Scatter(TupleDataChunkState &chunk_state, const DataCh
 	}
 #endif
 #ifdef LINEAGE
-    if (active_log && active_log->capture) {
+    if (active_log && active_log->capture && active_lop->mapping_recycler_node == nullptr) {
 		if (lineage_manager->compress){
 
 			size_t is_ascend_count = 0;

@@ -209,13 +209,13 @@ bool PhysicalLimit::HandleOffset(DataChunk &input, idx_t &current_offset, idx_t 
 			// set up a slice of the input chunks
 			input.Slice(input, sel, chunk_count);
 #ifdef LINEAGE
-			if (lineage_manager->capture && active_log) {
-			if (lineage_manager->compress){
-				active_log->compressed_limit_offset.PushBack(start_position, chunk_count, current_offset);
-			} else {
-				active_log->limit_offset.push_back({start_position, chunk_count, current_offset});
+			if (lineage_manager->capture && active_log && active_lop->mapping_recycler_node == nullptr) {
+				if (lineage_manager->compress){
+					active_log->compressed_limit_offset.PushBack(start_position, chunk_count, current_offset);
+				} else {
+					active_log->limit_offset.push_back({start_position, chunk_count, current_offset});
+				}
 			}
-		}
 #endif
 		} else {
 			current_offset += input_size;
@@ -235,7 +235,7 @@ bool PhysicalLimit::HandleOffset(DataChunk &input, idx_t &current_offset, idx_t 
 		input.Reference(input);
 		input.SetCardinality(chunk_count);
 #ifdef LINEAGE
-    if (lineage_manager->capture && active_log) {
+    if (lineage_manager->capture && active_log && active_lop->mapping_recycler_node == nullptr) {
 		if (lineage_manager->compress){
 			active_log->compressed_limit_offset.PushBack(0, chunk_count, current_offset);
 		} else {

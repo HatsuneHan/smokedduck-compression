@@ -51,7 +51,8 @@ OperatorResultType PhysicalFilter::ExecuteInternal(ExecutionContext &context, Da
 	idx_t result_count = state.executor.SelectExpression(input, state.sel);
 	if (result_count == input.size()) {
 #ifdef LINEAGE
-		if (lineage_manager->capture && active_log) {
+		if (lineage_manager->capture && active_log
+		    && active_lop->mapping_recycler_node == nullptr) {
 			if (lineage_manager->compress) {
 				vector<idx_t> empty_vector;
 				vector<idx_t> empty_vector_idx_t;
