@@ -1001,25 +1001,30 @@ bool OperatorLineage::Matches(const shared_ptr<RecyclerNode>& rnode){
 	}
 
 	case 1: {
-		bool matchcase = this->children[0]->Matches(rnode->GetChildren()[0]);
-		if(matchcase){
-			return true;
+		for(auto& child : rnode->GetChildren()){
+			if(this->children[0]->Matches(child)){
+				return true;
+			}
 		}
-
 		return false;
 
 	}
 
 	case 2: {
-		bool matchcase_forward = this->children[0]->Matches(rnode->GetChildren()[0]) &&
-				this->children[1]->Matches(rnode->GetChildren()[1]);
-		bool matchcase_reverse = this->children[0]->Matches(rnode->GetChildren()[1]) &&
-		                         this->children[1]->Matches(rnode->GetChildren()[0]);
+		bool matchcase_left = false;
+		bool matchcase_right = false;
 
-		if(matchcase_forward || matchcase_reverse){
-			return true;
+		for(auto& child : rnode->GetChildren()){
+			if(!matchcase_left && this->children[0]->Matches(child)){
+				matchcase_left = true;
+			}
+			if(!matchcase_right && this->children[1]->Matches(child)){
+				matchcase_right = true;
+			}
+			if(matchcase_left && matchcase_right){
+				return true;
+			}
 		}
-
 		return false;
 	}
 

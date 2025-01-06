@@ -517,7 +517,7 @@ SinkFinalizeType PhysicalHashJoin::Finalize(Pipeline &pipeline, Event &event, Cl
 		sink.ScheduleFinalize(pipeline, event);
 	}
 #ifdef LINEAGE
-  if (lineage_manager->capture && active_log && !use_perfect_hash) {
+  if (lineage_manager->capture && active_log && !use_perfect_hash && active_lop->mapping_recycler_node == nullptr) {
     if (lineage_manager->compress){
 		active_log->compressed_perfect_full_scan_ht_log.Clear();
 	} else {

@@ -83,7 +83,7 @@ void RowOperations::CombineStates(RowOperationsState &state, TupleDataLayout &la
 	VectorOperations::AddInPlace(targets, UnsafeNumericCast<int64_t>(layout.GetAggrOffset()), count);
 
 #ifdef LINEAGE
-	if (lineage_manager->capture && active_log) {
+	if (lineage_manager->capture && active_log && active_lop->mapping_recycler_node == nullptr) {
 		auto src_ptrs = FlatVector::GetData<data_ptr_t>(sources);
 		auto target_ptrs = FlatVector::GetData<data_ptr_t>(targets);
 
@@ -141,7 +141,7 @@ void RowOperations::FinalizeStates(RowOperationsState &state, TupleDataLayout &l
 	VectorOperations::AddInPlace(addresses_copy, UnsafeNumericCast<int64_t>(layout.GetAggrOffset()), result.size());
 
 #ifdef LINEAGE
-	if (lineage_manager->capture && active_log) {
+	if (lineage_manager->capture && active_log && active_lop->mapping_recycler_node == nullptr) {
 		auto ptrs = FlatVector::GetData<data_ptr_t>(addresses);
 		if (lineage_manager->compress){
 			data_ptr_t* addresses_compressed_rle = ChangeAddressToDeltaRLE(ptrs, result.size());

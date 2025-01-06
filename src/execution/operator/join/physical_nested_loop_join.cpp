@@ -415,7 +415,7 @@ OperatorResultType PhysicalNestedLoopJoin::ResolveComplexJoin(ExecutionContext &
 			chunk.Slice(input, lvector, match_count);
 			chunk.Slice(right_payload, rvector, match_count, input.ColumnCount());
 #ifdef LINEAGE
-      if (lineage_manager->capture && active_log) {
+      if (lineage_manager->capture && active_log && active_lop->mapping_recycler_node == nullptr) {
         if (lineage_manager->compress){
 
 			vector<vector<idx_t>> result_vector = ChangeSelToBitMap(lvector.sel_data()->owned_data.get(), match_count, CompressionMethod::LZ4);
@@ -503,7 +503,7 @@ SourceResultType PhysicalNestedLoopJoin::GetData(ExecutionContext &context, Data
 	// if the LHS is exhausted in a FULL/RIGHT OUTER JOIN, we scan chunks we still need to output
 	sink.right_outer.Scan(gstate.scan_state, lstate.scan_state, chunk);
 #ifdef LINEAGE
-  if (lineage_manager->capture && active_log) {
+  if (lineage_manager->capture && active_log && active_lop->mapping_recycler_node == nullptr) {
     if (lineage_manager->compress){
 		vector<vector<idx_t>> result_vector = ChangeSelToBitMap(lstate.scan_state.match_sel.data(), chunk.size(), CompressionMethod::LZ4);
 

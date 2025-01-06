@@ -21,11 +21,11 @@ public:
 	~RecyclerNode(){}
 
 	void AddChild(const shared_ptr<RecyclerNode>& child) {
-		children.push_back(child);
+		children.insert(child);
 	}
 
 	void AddParent(const shared_ptr<RecyclerNode>& parent) {
-		parents.push_back(parent);
+		parents.insert(parent);
 	}
 
 	void SetRecyclerLop(const shared_ptr<OperatorLineage>& lop){
@@ -42,14 +42,14 @@ public:
 	string GetName(){ return name;}
 	string GetTableName(){ return table_name;}
 	string GetExtra(){ return extra;}
-	std::vector<shared_ptr<RecyclerNode>> GetChildren(){ return children;}
-	std::vector<shared_ptr<RecyclerNode>> GetParents(){ return parents;}
+	std::set<shared_ptr<RecyclerNode>> GetChildren(){ return children;}
+	std::set<shared_ptr<RecyclerNode>> GetParents(){ return parents;}
 
-	std::vector<shared_ptr<RecyclerNode>> GetLeafNodes(){ return leaf_nodes;}
-	void AddLeafNode(const shared_ptr<RecyclerNode>& leaf_node){ leaf_nodes.push_back(leaf_node);}
+	std::set<shared_ptr<RecyclerNode>> GetLeafNodes(){ return leaf_nodes;}
+	void AddLeafNode(const shared_ptr<RecyclerNode>& leaf_node){ leaf_nodes.insert(leaf_node);}
 	void UpdateChildLeafNode(const shared_ptr<RecyclerNode>& child_node){
 		for (auto &leaf_node : child_node->GetLeafNodes()){
-			leaf_nodes.push_back(leaf_node);
+			leaf_nodes.insert(leaf_node);
 		}
 	}
 
@@ -60,6 +60,14 @@ public:
 		return nullptr;
 	}
 
+	void EraseParent(const shared_ptr<RecyclerNode>& parent){
+		parents.erase(parent);
+	}
+
+	void EraseChild(const shared_ptr<RecyclerNode>& child){
+		children.erase(child);
+	}
+
 
 private:
 	PhysicalOperatorType type;
@@ -67,13 +75,13 @@ private:
 	string table_name;
 	string extra;
 
-	std::vector<shared_ptr<RecyclerNode>> children;
-	std::vector<shared_ptr<RecyclerNode>> parents;
+	std::set<shared_ptr<RecyclerNode>> children;
+	std::set<shared_ptr<RecyclerNode>> parents;
 
 	bool lop_is_stored;
 	shared_ptr<OperatorLineage> recycler_lop;
 
-	std::vector<shared_ptr<RecyclerNode>> leaf_nodes;
+	std::set<shared_ptr<RecyclerNode>> leaf_nodes;
 };
 
 

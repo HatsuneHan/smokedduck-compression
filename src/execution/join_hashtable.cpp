@@ -543,7 +543,7 @@ void ScanStructure::NextInnerJoin(DataChunk &keys, DataChunk &left, DataChunk &r
 			}
 		}
 #ifdef LINEAGE
-    if (lineage_manager->capture && active_log && result_count > 0) {
+    if (lineage_manager->capture && active_log && result_count > 0 && active_lop->mapping_recycler_node == nullptr) {
       auto ptrs = FlatVector::GetData<data_ptr_t>(pointers);
 
       if (lineage_manager->compress){
@@ -632,7 +632,7 @@ void ScanStructure::NextSemiOrAntiJoin(DataChunk &keys, DataChunk &left, DataChu
 		// reference the columns of the left side from the result
 		result.Slice(left, sel, result_count);
 #ifdef LINEAGE
-		if (lineage_manager->capture && active_log) {
+		if (lineage_manager->capture && active_log && active_lop->mapping_recycler_node == nullptr) {
 			if (lineage_manager->compress){
 
 				vector<vector<idx_t>> result_sel_vector = ChangeSelToBitMap(sel.data(), result_count, CompressionMethod::LZ4);
@@ -813,7 +813,7 @@ void ScanStructure::NextLeftJoin(DataChunk &keys, DataChunk &left, DataChunk &re
 			// slice the left side with tuples that did not find a match
 			result.Slice(left, sel, remaining_count);
 #ifdef LINEAGE
-			if (lineage_manager->capture && active_log) {
+			if (lineage_manager->capture && active_log && active_lop->mapping_recycler_node == nullptr) {
 				if (lineage_manager->compress){
 					sel_t* sel_copy = nullptr;
 
@@ -902,7 +902,7 @@ void ScanStructure::NextSingleJoin(DataChunk &keys, DataChunk &input, DataChunk 
 	}
 	result.SetCardinality(input.size());
 #ifdef LINEAGE
-	if (lineage_manager->capture && active_log) {
+	if (lineage_manager->capture && active_log && active_lop->mapping_recycler_node == nullptr) {
 		auto ptrs = FlatVector::GetData<data_ptr_t>(pointers);
 
     	if (lineage_manager->compress){
@@ -1003,7 +1003,7 @@ void JoinHashTable::ScanFullOuter(JoinHTScanState &state, Vector &addresses, Dat
 		data_collection->Gather(addresses, sel_vector, found_entries, output_col_idx, vector, sel_vector, nullptr);
 	}
 #ifdef LINEAGE
-	if (lineage_manager->capture && active_log) {
+	if (lineage_manager->capture && active_log && active_lop->mapping_recycler_node == nullptr) {
     	if (lineage_manager->compress){
 			data_ptr_t* rhs_ptrs = new data_ptr_t[found_entries];
 			std::copy(key_locations, key_locations + found_entries, rhs_ptrs);

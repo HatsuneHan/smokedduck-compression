@@ -139,7 +139,7 @@ void PerfectAggregateHashTable::AddChunk(DataChunk &groups, DataChunk &payload) 
 	}
 
 #ifdef LINEAGE
-	if (lineage_manager->capture && active_log) {
+	if (lineage_manager->capture && active_log && active_lop->mapping_recycler_node == nullptr) {
 		auto ptrs = FlatVector::GetData<data_ptr_t>(addresses);
 		if (lineage_manager->compress){
 			idx_t use_rle = GetUseRle(ptrs, groups.size());

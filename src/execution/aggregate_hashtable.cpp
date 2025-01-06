@@ -251,7 +251,7 @@ idx_t GroupedAggregateHashTable::AddChunk(DataChunk &groups, Vector &group_hashe
 
 	const auto new_group_count = FindOrCreateGroups(groups, group_hashes, state.addresses, state.new_groups);
 #ifdef LINEAGE
-  if (lineage_manager->capture && active_log) {
+  if (lineage_manager->capture && active_log && active_lop->mapping_recycler_node == nullptr) {
 	  	auto ptrs = FlatVector::GetData<data_ptr_t>(state.addresses);
 		if (lineage_manager->compress){
 			idx_t use_rle = GetUseRle(ptrs, groups.size());

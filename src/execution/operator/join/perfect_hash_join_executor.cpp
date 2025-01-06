@@ -85,7 +85,7 @@ bool PerfectHashJoinExecutor::FullScanHashTable(LogicalType &key_type) {
 	}
 
 #ifdef LINEAGE
-  if (lineage_manager->capture && active_log && key_count) {
+  if (lineage_manager->capture && active_log && key_count && active_lop->mapping_recycler_node == nullptr) {
 		if (lineage_manager->compress) {
 			sel_t* sel_build_deltabitpack = ChangeSelDataToDeltaBitpack(sel_build.sel_data()->owned_data.get(), key_count);
 			sel_t* sel_tuples_deltarle = ChangeSelDataToDeltaRLE(sel_tuples.sel_data()->owned_data.get(), key_count);
@@ -235,7 +235,7 @@ OperatorResultType PerfectHashJoinExecutor::ProbePerfectHashTable(ExecutionConte
 		result_vector.Slice(state.build_sel_vec, probe_sel_count);
 	}
 #ifdef LINEAGE
-  if (lineage_manager->capture && active_log && probe_sel_count) {
+  if (lineage_manager->capture && active_log && probe_sel_count && active_lop->mapping_recycler_node == nullptr) {
 	  if (lineage_manager->compress){
 
 		  sel_t* compressed_right = ChangeSelDataToBitpack(state.build_sel_vec.data(), probe_sel_count);
