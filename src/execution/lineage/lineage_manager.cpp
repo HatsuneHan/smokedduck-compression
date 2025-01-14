@@ -103,8 +103,10 @@ void LineageManager::InitOperatorPlan(ClientContext &context, PhysicalOperator *
 
 	shared_ptr<OperatorLineage> lineage_plan = lineage_manager->global_logger[(void*)op];
 
-	// set the mapping recycler node for this lineage_plan
-	lineage_manager->recycler_graph->MatchTree(lineage_plan);
+	if(lineage_manager->reuse){
+		// set the mapping recycler node for this lineage_plan
+		lineage_manager->recycler_graph->MatchTree(lineage_plan);
+	}
 }
 
 void LineageManager::CreateLineageTables(ClientContext &context, PhysicalOperator *op, idx_t query_id) {
@@ -147,7 +149,7 @@ void LineageManager::CreateLineageTables(ClientContext &context, PhysicalOperato
 		create_info->columns.AddColumn(move(table_column_types[col_i]));
 	}
 
-	if(lineage_manager->global_logger[(void *)op]->mapping_recycler_node == nullptr){
+	if(lineage_manager->global_logger[(void *)op]->mapping_recycler_node == nullptr || !lineage_manager->reuse){
 		table_lineage_op[table_name] = lineage_manager->global_logger[(void *)op];
 	} else {
 		table_lineage_op[table_name] = lineage_manager->global_logger[(void *)op]->
@@ -166,14 +168,13 @@ void LineageManager::StoreQueryLineage(ClientContext &context, PhysicalOperator 
 	queryid_to_plan[query_id] = lineage_manager->global_logger[(void *)op];
 	if (persist) CreateLineageTables(context, op, query_id);
 
-
-	shared_ptr<OperatorLineage> lineage_plan = lineage_manager->global_logger[(void*)op];
-	if(!lineage_manager->recycler_graph){
-		lineage_manager->recycler_graph = make_shared_ptr<RecyclerGraph>();
+	if(lineage_manager->reuse){
+		shared_ptr<OperatorLineage> lineage_plan = lineage_manager->global_logger[(void*)op];
+		if(!lineage_manager->recycler_graph){
+			lineage_manager->recycler_graph = make_shared_ptr<RecyclerGraph>();
+		}
+		lineage_manager->recycler_graph->AddQuery(lineage_plan);
 	}
-	lineage_manager->recycler_graph->AddQuery(lineage_plan);
-
-	auto tmp = lineage_manager->recycler_graph;
 
 }
 

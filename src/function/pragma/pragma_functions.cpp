@@ -160,6 +160,11 @@ static void PragmaCompressLineage(ClientContext &context, const FunctionParamete
 	std::cout << "\nEnable Compress Lineage" << std::endl;
 }
 
+static void PragmaReuseLineage(ClientContext &context, const FunctionParameters &parameters) {
+	if (lineage_manager) lineage_manager->reuse = true;
+	std::cout << "\nEnable Reuse Lineage" << std::endl;
+}
+
 #endif
 
 void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
@@ -206,6 +211,7 @@ void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
 	set.AddFunction(PragmaFunction::PragmaStatement("clear_lineage", PragmaClearLineage));
 	set.AddFunction(PragmaFunction::PragmaStatement("persist_lineage", PragmaPersistLineage));
 	set.AddFunction(PragmaFunction::PragmaStatement("compress_lineage", PragmaCompressLineage));
+	set.AddFunction(PragmaFunction::PragmaStatement("reuse_lineage", PragmaReuseLineage));
 #endif
 }
 

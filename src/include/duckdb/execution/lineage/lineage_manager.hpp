@@ -28,7 +28,7 @@ extern thread_local shared_ptr<OperatorLineage> active_lop;
 */
 class LineageManager {
 public:
-	explicit LineageManager() : capture(false), persist(false), compress(false) {}
+	explicit LineageManager() : capture(false), persist(false), compress(false), reuse(false) {}
 	void InitOperatorPlan(ClientContext &context, PhysicalOperator *op);
 	shared_ptr<OperatorLineage> CreateOperatorLineage(ClientContext &context, PhysicalOperator *op);
 	int PlanAnnotator(PhysicalOperator *op, int counter);
@@ -73,7 +73,9 @@ public:
 public:
   bool capture;
   bool persist;
-	bool compress;
+  bool compress;
+  bool reuse;
+
   int physical_id_cnt;
   std::unordered_map<void*, shared_ptr<OperatorLineage>> global_logger;
 
