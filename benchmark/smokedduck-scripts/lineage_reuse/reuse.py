@@ -21,12 +21,12 @@ CREATE TABLE tbl_flights AS
 con.execute(create_table_sql)
 
 workload_list = get_workload("/home/hxy/Documents/IDEBench-public/results")
-print(workload_list)
 
 # con.execute("PRAGMA disable_optimizer")
 con.execute("PRAGMA enable_lineage")
 con.execute("PRAGMA persist_lineage")
 con.execute("PRAGMA compress_lineage")
+con.execute("PRAGMA reuse_lineage")
 
 total_lineage_list = []
 lineage_list = []
@@ -43,7 +43,12 @@ for i in range(1):
 
   total_lineage_list.append(lineage_list)
 
+total_sum = sum(sum(inner_list) for inner_list in total_lineage_list)
+
+print(workload_list[0][1])
+print(workload_list[0][3])
 print(total_lineage_list)
+print(total_sum)
     
 
 

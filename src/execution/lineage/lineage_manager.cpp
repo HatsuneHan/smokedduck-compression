@@ -101,10 +101,9 @@ void LineageManager::InitOperatorPlan(ClientContext &context, PhysicalOperator *
 	PlanAnnotator(op, 0);
 	CreateOperatorLineage(context, op);
 
-	shared_ptr<OperatorLineage> lineage_plan = lineage_manager->global_logger[(void*)op];
-
 	if(lineage_manager->reuse){
 		// set the mapping recycler node for this lineage_plan
+		shared_ptr<OperatorLineage> lineage_plan = lineage_manager->global_logger[(void*)op];
 		lineage_manager->recycler_graph->MatchTree(lineage_plan);
 	}
 }
@@ -774,14 +773,12 @@ size_t LineageManager::GetCompressedArtifactSize(std::unordered_map<string, size
 	size_t nlj_log_size = 0;
 	size_t nlj_log_buffer_size = 0;
 
-
 	physical_op_num = physical_lname_relations.size();
 
-	for (const auto& pair : lineage_manager->global_logger){
-		OperatorLineage* lop = pair.second.get();
 
-		idx_t this_query_id = lineage_manager->lop_queryid_map[lop];
-//		std::cout << "this_query_id: " << this_query_id << std::endl;
+	for (const auto& pair : lineage_manager->lop_queryid_map){
+		OperatorLineage* lop = pair.first;
+		idx_t this_query_id = pair.second;
 
 		if(this_query_id != query_id){
 			continue;
@@ -798,6 +795,8 @@ size_t LineageManager::GetCompressedArtifactSize(std::unordered_map<string, size
 
 		for (const auto& pair_log : lop->log){
 			Log* curr_log = pair_log.second.get();
+
+//			std::cout << "log: 0x" << std::hex << reinterpret_cast<idx_t>(curr_log) << std::endl;
 
 			// compressed filter log
 			{
@@ -989,6 +988,7 @@ size_t LineageManager::GetCompressedArtifactSize(std::unordered_map<string, size
 
 				op_lineage_size += tmp_scatter_log_size;
 				op_lineage_buffer_size += tmp_scatter_log_buffer_size;
+
 			}
 
 			// scatter sel log
@@ -1265,7 +1265,7 @@ size_t LineageManager::GetCompressedArtifactSize(std::unordered_map<string, size
 	if(total_size == 0){
 		return total_size;
 	}
-
+	
 	std::cout << "compressed filter_log_size: " << filter_log_size << std::endl;
 	std::cout << "compressed filter_log_buffer_size: " << filter_log_buffer_size << std::endl;
 

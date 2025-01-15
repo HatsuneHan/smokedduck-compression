@@ -162,13 +162,13 @@ def parse_plan_cardinality(qid):
 
 def getStats(con, q):
     print(q)
-    con.execute("DROP TABLE if exists duckdb_queries_info;")
-    info_query = "create table if not exists duckdb_queries_info as select * from duckdb_queries_list();"
-    con.execute(info_query)
+    # con.execute("DROP TABLE if exists duckdb_queries_info;")
+    # info_query = "create table if not exists duckdb_queries_info as select * from duckdb_queries_list();"
+    # con.execute(info_query)
 
-    print(con.execute("select * from duckdb_queries_info").fetchdf())
+    # print(con.execute("select * from duckdb_queries_info").fetchdf())
 
-    q_list = "select * from duckdb_queries_info where query = ? order by query_id desc limit 1;"
+    q_list = "select * from duckdb_queries_list() where query = ? order by query_id desc limit 1;"
     query_info = con.execute(q_list, [q]).fetchdf()
     print(query_info)
 

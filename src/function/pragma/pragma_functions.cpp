@@ -131,6 +131,8 @@ static void PragmaEnableLineage(ClientContext &context, const FunctionParameters
   if (!lineage_manager) lineage_manager = make_uniq<LineageManager>();
 	lineage_manager->capture = true;
   lineage_manager->persist = false;
+  lineage_manager->compress = false;
+  lineage_manager->reuse = false;
 	std::cout << "\nEnable Lineage Capture" << std::endl;
 }
 

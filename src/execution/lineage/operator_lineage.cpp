@@ -987,6 +987,12 @@ bool OperatorLineage::Matches(const shared_ptr<RecyclerNode>& rnode){
 		return false;
 	}
 
+	//TODO: if projection/collector, return child matches
+	if(type == PhysicalOperatorType::RESULT_COLLECTOR
+	    || type == PhysicalOperatorType::PROJECTION){
+		return children[0]->Matches(rnode);
+	}
+
 	// check basic information
 	if(this->type != rnode->GetType() || this->name != rnode->GetName() ||
 	    this->table_name != rnode->GetTableName() || this->extra != rnode->GetExtra() ||
